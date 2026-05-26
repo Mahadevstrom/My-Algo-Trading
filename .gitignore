@@ -1,0 +1,64 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+backend/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Angular
+frontend-v2/node_modules/
+frontend-v2/dist/
+frontend-v2/.angular/cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime databases and SQLite sidecar files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs and runtime output
+*.log
+*.out.log
+*.err.log
+backend/logs/
+
+# Local backups created during development
+*.bak
+*.bak_*
+*.bak-*
+*.bak_phase*
+
+# Generated/downloaded market data
+backend/data/**/*.csv
+!backend/data/sample_instruments.csv
+backend/data/dhan/*.csv
+
+# Local machine notes with credentials
+PostgreSql.txt
+PROJECT_LOG.txt
+RoadMape.txt
+
+# Local editor/system files
+.vscode/
+.idea/
+.history/
+.DS_Store
+Thumbs.db
+
+# Local research PDFs/books/notes not needed for source build
+Informaction & pdf/

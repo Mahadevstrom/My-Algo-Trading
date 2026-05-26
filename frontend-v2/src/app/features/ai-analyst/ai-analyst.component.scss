@@ -1,0 +1,179 @@
+.analyst-container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  color: var(--nx-text);
+
+  .header-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      mat-icon {
+        color: #9c27b0; /* Violet accent for AI */
+        font-size: 32px;
+        width: 32px;
+        height: 32px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+        color: var(--nx-text);
+      }
+    }
+    
+    .provider-toggle {
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px;
+      border-radius: 8px;
+      border: 1px solid var(--nx-border);
+
+      button {
+        color: var(--nx-text-muted);
+        border-radius: 6px;
+        padding: 0 16px;
+        
+        &.active {
+          background: rgba(156, 39, 176, 0.2);
+          color: #bb86fc;
+        }
+
+        mat-icon {
+          margin-right: 4px;
+        }
+      }
+    }
+  }
+
+  .unconfigured-card {
+    background: var(--nx-card-bg);
+    border: 1px solid var(--nx-border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+
+    mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      color: var(--nx-accent);
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      margin-top: 0;
+      color: var(--nx-text);
+    }
+    
+    p {
+      color: var(--nx-text-muted);
+      margin-bottom: 24px;
+    }
+  }
+
+  .glass-card {
+    background: var(--nx-card-bg);
+    border: 1px solid var(--nx-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+
+    .markdown-body {
+      padding: 32px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+      color: var(--nx-text);
+      font-size: 15px;
+
+      ::ng-deep {
+        h1, h2, h3, h4 {
+          color: var(--nx-text);
+          margin-top: 24px;
+          margin-bottom: 16px;
+          font-weight: 600;
+        }
+
+        h2 {
+          font-size: 1.5em;
+          border-bottom: 1px solid var(--nx-border);
+          padding-bottom: 0.3em;
+        }
+
+        h3 {
+          font-size: 1.25em;
+        }
+
+        p {
+          margin-top: 0;
+          margin-bottom: 16px;
+        }
+
+        ul, ol {
+          margin-top: 0;
+          margin-bottom: 16px;
+          padding-left: 2em;
+        }
+
+        li {
+          margin-bottom: 0.25em;
+        }
+
+        strong {
+          font-weight: 600;
+          color: #bb86fc; /* Slightly bright violet for emphasis */
+        }
+        
+        blockquote {
+          margin: 0;
+          padding: 0 1em;
+          color: var(--nx-text-muted);
+          border-left: 0.25em solid var(--nx-border);
+        }
+      }
+    }
+
+    .loading-state, .error-state {
+      padding: 64px 32px;
+      text-align: center;
+
+      mat-icon {
+        font-size: 48px;
+        width: 48px;
+        height: 48px;
+        margin-bottom: 16px;
+        &.spin {
+          animation: spin 1.5s linear infinite;
+          color: var(--nx-accent);
+        }
+        &.error-icon {
+          color: #f44336;
+        }
+      }
+
+      h3 {
+        margin: 0 0 8px 0;
+        color: var(--nx-text);
+      }
+
+      p {
+        margin: 0;
+        color: var(--nx-text-muted);
+      }
+    }
+  }
+
+  @keyframes spin {
+    100% { transform: rotate(360deg); }
+  }
+}

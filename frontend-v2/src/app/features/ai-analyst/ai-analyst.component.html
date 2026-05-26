@@ -1,0 +1,141 @@
+<div class="analyst-container">
+  <div class="header-area">
+    <div class="title-group">
+      <mat-icon>psychology</mat-icon>
+      <h1>AI Trading Analyst</h1>
+    </div>
+
+    <!-- Provider Selection -->
+    <div class="provider-toggle" style="display:flex;gap:8px">
+      <button mat-button 
+              [class.active]="provider() === 'ollama'" 
+              [disabled]="!providers().ollama?.configured"
+              (click)="setProvider('ollama')"
+              title="Local model: {{providers().ollama?.model || 'unconfigured'}}">
+        <mat-icon>computer</mat-icon> Ollama (Local)
+        <span *ngIf="providers().ollama?.configured" style="font-size:9px;opacity:0.6;margin-left:4px">
+          · {{providers().ollama?.model}}
+        </span>
+      </button>
+
+      <button mat-button 
+              [class.active]="provider() === 'gemini'" 
+              [disabled]="!providers().gemini?.configured"
+              (click)="setProvider('gemini')"
+              title="Cloud model: {{providers().gemini?.model || 'unconfigured'}}">
+        <mat-icon>cloud</mat-icon> Gemini
+      </button>
+
+      <button mat-button 
+              [class.active]="provider() === 'openai'" 
+              [disabled]="!providers().openai?.configured"
+              (click)="setProvider('openai')"
+              title="Cloud model: {{providers().openai?.model || 'unconfigured'}}">
+        <mat-icon>smart_toy</mat-icon> OpenAI
+      </button>
+    </div>
+  </div>
+
+  <ng-container *ngIf="isConfigured() === false">
+    <div class="unconfigured-card" style="max-width:600px;margin:40px auto;text-align:center;padding:32px;background:rgba(255,255,255,0.02);border:1px solid var(--nx-border);border-radius:12px">
+      <mat-icon style="font-size:48px;width:48px;height:48px;color:var(--nx-text-3)">key_off</mat-icon>
+      <h2 style="font-size:18px;font-weight:600;margin-top:16px;color:var(--nx-text-1)">No LLM Provider Configured</h2>
+      <p style="font-size:13px;color:var(--nx-text-3);line-height:1.5;margin-top:8px">
+        To activate the AI Trading Analyst, please configure at least one LLM provider in your backend <code>.env</code> file:
+      </p>
+      
+      <div style="text-align:left;font-size:12px;color:var(--nx-text-2);background:var(--nx-bg-raised);padding:14px;border-radius:8px;margin-top:16px;font-family:monospace;line-height:1.6">
+        # 1. Local LLM via Ollama (Recommended & Free)<br>
+        OLLAMA_BASE_URL=http://localhost:11434/v1<br>
+        OLLAMA_MODEL_NAME=qwen2.5-coder:7b<br><br>
+        # 2. Cloud LLM via Google Gemini<br>
+        GEMINI_API_KEY=your_key_here<br>
+        GEMINI_MODEL_NAME=gemini-1.5-flash<br><br>
+        # 3. Cloud LLM via OpenAI GPT<br>
+        OPENAI_API_KEY=your_key_here<br>
+        OPENAI_MODEL_NAME=gpt-4o-mini
+      </div>
+      
+      <p style="font-size:11px;color:var(--nx-text-3);margin-top:16px">
+        Restart the backend server after editing your <code>.env</code> file.
+      </p>
+    </div>
+  </ng-container>
+
+  <ng-container *ngIf="isConfigured() === true">
+    <mat-tab-group animationDuration="200ms" color="accent">
+      
+      <!-- Market Structure Tab -->
+      <mat-tab label="Real-time Market Structure">
+        <div class="glass-card" style="margin-top: 16px;">
+          
+          <div *ngIf="loadingMarket()" class="loading-state">
+            <mat-icon class="spin">autorenew</mat-icon>
+            <h3>Analyzing Market Structure...</h3>
+            <p>Gathering Options Chain, Participant Data, and Market Flow.</p>
+          </div>
+          
+          <div *ngIf="errorMarket()" class="error-state">
+            <mat-icon class="error-icon">error</mat-icon>
+            <h3>Analysis Failed</h3>
+            <p>{{ errorMarket() }}</p>
+            <button mat-stroked-button color="accent" (click)="fetchMarketStructure()" style="margin-top: 16px;">
+              Retry
+            </button>
+          </div>
+
+          <div *ngIf="!loadingMarket() && !errorMarket() && marketStructureHtml()" 
+               class="markdown-body" 
+               [innerHTML]="marketStructureHtml()">
+          </div>
+          
+          <div *ngIf="!loadingMarket() && !errorMarket() && marketStructureHtml()" style="padding: 16px 32px; border-top: 1px solid var(--nx-border); text-align: right;">
+            <button mat-button color="accent" (click)="fetchMarketStructure()">
+              <mat-icon>refresh</mat-icon> Refresh Analysis
+            </button>
+          </div>
+        </div>
+      </mat-tab>
+
+      <!-- Post-Market Report Tab -->
+      <mat-tab label="Post-Market Summary">
+        <div class="glass-card" style="margin-top: 16px;">
+          
+          <div *ngIf="loadingReport()" class="loading-state">
+            <mat-icon class="spin">autorenew</mat-icon>
+            <h3>Generating Post-Market Report...</h3>
+            <p>Reviewing today's trades and overall context.</p>
+          </div>
+          
+          <div *ngIf="errorReport()" class="error-state">
+            <mat-icon class="error-icon">error</mat-icon>
+            <h3>Report Generation Failed</h3>
+            <p>{{ errorReport() }}</p>
+            <button mat-stroked-button color="accent" (click)="fetchPostMarketReport()" style="margin-top: 16px;">
+              Retry
+            </button>
+          </div>
+
+          <div *ngIf="!loadingReport() && !errorReport() && postMarketHtml()" 
+               class="markdown-body" 
+               [innerHTML]="postMarketHtml()">
+          </div>
+
+          <div *ngIf="!loadingReport() && !errorReport() && !postMarketHtml()" class="loading-state">
+            <button mat-flat-button color="accent" (click)="fetchPostMarketReport()">
+              <mat-icon>summarize</mat-icon> Generate End-of-Day Report
+            </button>
+          </div>
+          
+          <div *ngIf="!loadingReport() && !errorReport() && postMarketHtml()" style="padding: 16px 32px; border-top: 1px solid var(--nx-border); text-align: right;">
+             <button mat-button color="accent" (click)="fetchPostMarketReport()">
+              <mat-icon>refresh</mat-icon> Regenerate Report
+            </button>
+          </div>
+          
+        </div>
+      </mat-tab>
+
+    </mat-tab-group>
+  </ng-container>
+</div>

@@ -1,0 +1,12 @@
+project-includes = ["app", "tests"]
+project-excludes = [
+  ".venv/**",
+  "**/__pycache__/**",
+  "logs/**",
+  "*.log",
+]
+search-path = ["."]
+python-version = "3.10"
+python-platform = "win32"
+python-interpreter-path = ".venv/Scripts/python.exe"
+
