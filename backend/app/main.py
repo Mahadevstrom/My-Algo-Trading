@@ -50,6 +50,7 @@ from app.api.routes_audit import router as audit_router
 from app.api.routes_backtest import router as backtest_router, walk_forward_router
 from app.api.routes_broker import router as broker_router
 from app.api.routes_data_quality import router as data_quality_router
+from app.api.routes_feed_reliability import router as feed_reliability_router
 from app.api.routes_dhan_instruments import router as dhan_instruments_router
 from app.api.routes_health import router as health_router
 from app.api.routes_historical import router as historical_router
@@ -60,6 +61,7 @@ from app.api.routes_live_feed import router as live_feed_router
 from app.api.routes_live_monitor import router as live_monitor_router
 from app.api.routes_live_paper import router as live_paper_router
 from app.api.routes_market import router as market_router
+from app.api.routes_market_backfill import router as market_backfill_router
 from app.api.routes_market_flow import router as market_flow_router
 from app.api.routes_nse_data import router as nse_data_router
 from app.api.routes_option_chain import router as option_chain_router
@@ -78,12 +80,16 @@ from app.api.routes_strategy_evaluation import router as strategy_evaluation_rou
 from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trade_journal import router as trade_journal_router
 from app.api.routes_ai_analyst import router as ai_analyst_router
+from app.engine.context.routes import router as context_router
 from app.engine.specialist.routes import router as specialist_router
+from app.engine.setup.routes import router as setup_router
 from app.config import settings
-from app.db.database import init_db
+from app.db.database import SessionLocal, init_db
 from app.services.live_feed_service import get_live_feed_service
 from app.services.live_market_monitor_service import get_live_market_monitor_service
 from app.services.live_paper_simulator_service import get_live_paper_simulator_service
+from app.services.feed_reliability_service import get_feed_reliability_service
+from app.services.startup_market_backfill_service import get_startup_market_backfill_service
 from app.agent_evolution.routes import router as agent_evolution_router
 from app.agent_evolution.scheduler import get_agent_evolution_scheduler
 
@@ -91,8 +97,16 @@ from app.agent_evolution.scheduler import get_agent_evolution_scheduler
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
+    if settings.setup_seeder_on_startup:
+        from app.engine.setup.setup_seeder import seed_core_setups
+
+        with SessionLocal() as seed_db:
+            seed_core_setups(seed_db)
     await get_live_feed_service().auto_start_if_configured()
     await get_live_market_monitor_service().auto_start_if_configured()
+    with SessionLocal() as db:
+        await get_startup_market_backfill_service().auto_backfill_if_configured(db)
+    await get_feed_reliability_service().auto_start_if_configured()
     await get_live_paper_simulator_service().auto_start_if_configured()
     
     # Start Option Chain Snapshot Background Scheduler
@@ -112,6 +126,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_option_chain_snapshot_service().shutdown_scheduler()
         
         await get_live_paper_simulator_service().shutdown()
+        await get_feed_reliability_service().shutdown()
         await get_live_market_monitor_service().shutdown()
         await get_live_feed_service().shutdown()
 
@@ -142,6 +157,7 @@ app.include_router(backtest_router)
 app.include_router(walk_forward_router)
 app.include_router(broker_router)
 app.include_router(data_quality_router)
+app.include_router(feed_reliability_router)
 app.include_router(signals_router)
 app.include_router(signals_v2_router)
 app.include_router(strategy_evaluation_router)
@@ -151,6 +167,7 @@ app.include_router(instruments_router)
 app.include_router(dhan_instruments_router)
 app.include_router(indstocks_router)
 app.include_router(market_router)
+app.include_router(market_backfill_router)
 app.include_router(market_flow_router)
 app.include_router(nse_data_router)
 app.include_router(option_chain_router)
@@ -170,6 +187,8 @@ app.include_router(trade_journal_router)
 app.include_router(analytics_router)
 app.include_router(agent_evolution_router)
 app.include_router(specialist_router, prefix="/api/engine")
+app.include_router(context_router, prefix="/api/context")
+app.include_router(setup_router, prefix="/api/setup")
 
 
 @app.get("/")

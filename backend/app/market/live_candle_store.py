@@ -54,6 +54,45 @@ class LiveCandleStore:
                 self.last_candle_at = max(candle.updated_at for candle in updated)
             return {"updated": updated, "closed": closed}
 
+    async def upsert_backfilled_candles(
+        self,
+        candles: list[LiveCandle],
+        metadata: LiveInstrumentMetadata,
+    ) -> int:
+        if not candles:
+            return 0
+        async with self._lock:
+            synthetic_tick = NormalizedTick(
+                source="DHAN_BACKFILL",
+                exchange_segment=metadata.exchange_segment,
+                security_id=metadata.security_id,
+                symbol=metadata.symbol,
+                ltp=candles[-1].close,
+                timestamp=candles[-1].last_tick_at,
+                received_at=candles[-1].updated_at,
+                raw_payload={},
+            )
+            self._remember_metadata(synthetic_tick, metadata)
+            upserted = 0
+            for candle in sorted(candles, key=lambda item: (item.timeframe, item.start_time)):
+                timeframe = normalize_timeframe(candle.timeframe)
+                key = (str(candle.security_id), timeframe)
+                existing = self._candles.setdefault(key, deque(maxlen=self.max_history))
+                replaced = False
+                for index, current in enumerate(existing):
+                    if current.start_time == candle.start_time:
+                        existing[index] = candle
+                        replaced = True
+                        break
+                if not replaced:
+                    existing.append(candle)
+                    ordered = sorted(existing, key=lambda item: item.start_time)
+                    existing.clear()
+                    existing.extend(ordered[-self.max_history:])
+                upserted += 1
+            self.last_candle_at = max(candle.updated_at for candle in candles)
+            return upserted
+
     async def get_latest_candle(self, symbol: str, timeframe: str) -> LiveCandle | None:
         security_id = await self._security_id_for_symbol(symbol)
         if security_id is None:

@@ -1,0 +1,17 @@
+[
+  {
+    "date": "2026-06-06",
+    "name": "RBI Policy Decision",
+    "impact": "HIGH"
+  },
+  {
+    "date": "2026-07-31",
+    "name": "Union Budget 2026",
+    "impact": "EXTREME"
+  },
+  {
+    "date": "2026-06-11",
+    "name": "US CPI Data",
+    "impact": "MEDIUM"
+  }
+]

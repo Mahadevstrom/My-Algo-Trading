@@ -1,6 +1,4 @@
 from datetime import date
-import asyncio
-from time import monotonic
 from typing import Any
 
 import httpx
@@ -8,16 +6,11 @@ import httpx
 from app.config import Settings, settings
 from app.market.base import MarketDataProvider
 from app.market.schemas import clean_response, utc_timestamp
+from app.services.dhan_rest_quota_service import get_dhan_rest_quota_service
 
 
 class DhanDataAdapter(MarketDataProvider):
     """Read-only Dhan Data API adapter. No order placement methods belong here."""
-
-    _last_calls: list[float] = []
-    _rate_limit: int = 10
-    _rate_window: int = 60
-    _last_request_at = 0.0
-    _min_request_gap_seconds = 3.0
 
     def __init__(self, app_settings: Settings = settings) -> None:
         self.settings = app_settings
@@ -48,6 +41,7 @@ class DhanDataAdapter(MarketDataProvider):
             "message": message,
             "token_exposed": False,
             "usage": "MARKET_DATA_ONLY",
+            "rest_quota": get_dhan_rest_quota_service().status(),
         }
 
     async def get_ltp(self, instruments_by_segment: dict[str, list[int | str]]) -> dict[str, Any]:
@@ -225,8 +219,26 @@ class DhanDataAdapter(MarketDataProvider):
             "Accept": "application/json",
         }
 
+        quota = get_dhan_rest_quota_service()
+        cached = await quota.cached_response(endpoint, payload)
+        if cached is not None:
+            return cached
+        quota_decision = await quota.acquire(endpoint, payload)
+        if not quota_decision.get("allowed"):
+            return clean_response(
+                ok=False,
+                connected=False,
+                status="RATE_LIMITED",
+                message=(
+                    "Dhan REST quota guard is protecting the data feed. "
+                    "Using WebSocket/live-cache data until the local quota resets."
+                ),
+                quota_status=quota.status(),
+                quota_reason=quota_decision.get("status"),
+                retry_after_seconds=quota_decision.get("retry_after_seconds"),
+            )
+
         try:
-            await self._apply_rate_limit()
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, headers=headers, json=payload)
         except httpx.TimeoutException:
@@ -235,6 +247,7 @@ class DhanDataAdapter(MarketDataProvider):
                 connected=False,
                 status="TIMEOUT",
                 message="Dhan Data API request timed out.",
+                quota_status=quota.status(),
             )
         except httpx.HTTPError as exc:
             return clean_response(
@@ -242,42 +255,55 @@ class DhanDataAdapter(MarketDataProvider):
                 connected=False,
                 status="API_ERROR",
                 message=f"Dhan Data API request could not be completed: {type(exc).__name__}.",
+                quota_status=quota.status(),
             )
 
         if response.status_code in {401, 403}:
-            return clean_response(
+            result = clean_response(
                 ok=False,
                 connected=False,
                 status="UNAUTHORIZED",
                 message="Dhan token expired or unauthorized. Update backend/.env with a fresh access token.",
                 http_status=response.status_code,
+                quota_status=quota.status(),
             )
+            quota.record_response(endpoint, payload, result)
+            return result
 
         if response.status_code == 429:
-            return clean_response(
+            result = clean_response(
                 ok=False,
                 connected=False,
                 status="RATE_LIMITED",
                 message="Dhan Data API rate limit reached. Wait before sending more market-data requests.",
                 http_status=response.status_code,
+                quota_status=quota.status(),
             )
+            quota.record_response(endpoint, payload, result)
+            return result
 
         if response.status_code >= 400:
-            return clean_response(
+            result = clean_response(
                 ok=False,
                 connected=False,
                 status="API_ERROR",
                 message=f"Dhan Data API request failed with HTTP {response.status_code}. Check subscription, security id, exchange segment, and request body.",
                 http_status=response.status_code,
+                quota_status=quota.status(),
             )
+            quota.record_response(endpoint, payload, result)
+            return result
 
-        return clean_response(
+        result = clean_response(
             ok=True,
             connected=True,
             status="CONNECTED",
             message="Dhan Data API read-only request completed.",
             data=_sanitize_response(_safe_json(response)),
+            quota_status=quota.status(),
         )
+        quota.record_response(endpoint, payload, result)
+        return result
 
     def _preflight(self) -> dict[str, Any] | None:
         if not self.settings.dhan_data_enabled:
@@ -298,12 +324,6 @@ class DhanDataAdapter(MarketDataProvider):
 
     # Backup: def _check_rate_limit(self) -> bool
     def _check_rate_limit(self) -> bool:
-        now = monotonic()
-        cls = self.__class__
-        cls._last_calls = [called_at for called_at in cls._last_calls if now - called_at < cls._rate_window]
-        if len(cls._last_calls) >= cls._rate_limit:
-            return False
-        cls._last_calls.append(now)
         return True
 
     def _rate_limited_response(self) -> dict[str, Any]:
@@ -315,11 +335,7 @@ class DhanDataAdapter(MarketDataProvider):
         )
 
     async def _apply_rate_limit(self) -> None:
-        elapsed = monotonic() - self.__class__._last_request_at
-        wait_seconds = self._min_request_gap_seconds - elapsed
-        if wait_seconds > 0:
-            await asyncio.sleep(wait_seconds)
-        self.__class__._last_request_at = monotonic()
+        return None
 
 
 DhanDataClient = DhanDataAdapter

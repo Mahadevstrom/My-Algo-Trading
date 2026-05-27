@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.engine.specialist.label_importer import import_jsonl_labels, import_xlsx_labels
+from app.engine.specialist.market_structure_engine import MarketStructureEngine, build_market_structure_data
 from app.engine.specialist.models import LabelRecord, SpecialistEngineLog
 from app.engine.specialist.option_chain_engine import OptionChainEngine, build_option_chain_market_data
 from app.engine.specialist.shadow_logger import log_engine_evidence
@@ -102,6 +103,35 @@ def latest_option_chain_engine(db: Session = Depends(get_db)) -> dict:
     return _log_to_dict(record)
 
 
+@router.get("/market-structure-engine/evaluate")
+async def evaluate_market_structure_engine(
+    underlying: str = Query(default="NIFTY"),
+    timeframe: str = Query(default="5min"),
+    db: Session = Depends(get_db),
+) -> dict:
+    market_data = await build_market_structure_data(db, underlying, timeframe)
+    evidence = MarketStructureEngine().safe_evaluate(market_data)
+    evidence.evaluation_id = str(uuid.uuid4())
+    try:
+        log_engine_evidence(db, evidence)
+    except Exception:
+        pass
+    return evidence.model_dump(mode="json")
+
+
+@router.get("/market-structure-engine/latest")
+def latest_market_structure_engine(db: Session = Depends(get_db)) -> dict:
+    record = (
+        db.query(SpecialistEngineLog)
+        .filter(SpecialistEngineLog.engine_name == "market_structure_engine")
+        .order_by(SpecialistEngineLog.created_at.desc(), SpecialistEngineLog.id.desc())
+        .first()
+    )
+    if not record:
+        return {"status": "NO_DATA"}
+    return _log_to_dict(record)
+
+
 @router.get("/shadow-comparison")
 def shadow_comparison(
     engine_name: str = Query(default="option_chain_engine"),
@@ -122,6 +152,52 @@ def shadow_comparison(
         .all()
     )
     return {"engine": engine_name, "period_days": days, "count": len(records), "items": [_log_to_dict(row) for row in records]}
+
+
+@router.get("/shadow-comparison/multi-engine")
+def shadow_comparison_multi_engine(
+    days: int = Query(default=7, ge=1, le=90),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    records = (
+        db.query(SpecialistEngineLog)
+        .filter(SpecialistEngineLog.created_at >= cutoff)
+        .order_by(SpecialistEngineLog.created_at.desc(), SpecialistEngineLog.id.desc())
+        .limit(limit)
+        .all()
+    )
+    grouped: dict[str, list[SpecialistEngineLog]] = {}
+    for record in records:
+        key = record.evaluation_id or record.signal_id or str(record.id)
+        grouped.setdefault(key, []).append(record)
+
+    items = []
+    for evaluation_id, rows in grouped.items():
+        directions = [row.direction for row in rows if row.direction in {"BULLISH", "BEARISH"}]
+        agreement = len(set(directions)) <= 1 if directions else False
+        first = rows[0]
+        engines = {
+            row.engine_name: {
+                "verdict": row.verdict,
+                "score": row.score,
+                "direction": row.direction,
+                "confidence": row.confidence,
+            }
+            for row in rows
+        }
+        items.append(
+            {
+                "evaluation_id": evaluation_id,
+                "evaluated_at": first.evaluated_at.isoformat() if first.evaluated_at else None,
+                "signal_v2_decision": first.signal_engine_v2_decision,
+                "engines": engines,
+                "market_result": first.market_result,
+                "agreement": agreement,
+            }
+        )
+    return items
 
 
 @router.get("/shadow-comparison/summary")

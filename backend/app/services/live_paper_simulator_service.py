@@ -176,6 +176,8 @@ class LivePaperSimulatorService:
             ),
         )
         shadow_option_chain_engine = None
+        shadow_context_classifier = None
+        shadow_market_structure_engine = None
         try:
             from app.engine.specialist.option_chain_engine import run_option_chain_shadow
 
@@ -196,6 +198,47 @@ class LivePaperSimulatorService:
             import logging as _logging
 
             _logging.getLogger(__name__).warning(f"Shadow OC engine logging failed (non-fatal): {_e}")
+        try:
+            from app.engine.context.context_classifier import run_context_shadow
+
+            context_record = run_context_shadow(
+                db=db,
+                underlying=payload.underlying,
+                signal_result=signal,
+                signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
+                signal_v2_decision=getattr(signal, "decision", None),
+            )
+            if context_record is not None:
+                shadow_context_classifier = {
+                    "evaluation_id": context_record.evaluation_id,
+                    "context_type": context_record.context_type,
+                    "context_confidence": context_record.context_confidence,
+                    "confidence_modifier": context_record.confidence_modifier,
+                }
+        except Exception as _ctx_e:
+            import logging as _logging2
+
+            _logging2.getLogger(__name__).warning(f"Context classification shadow logging failed (non-fatal): {_ctx_e}")
+        try:
+            from app.engine.specialist.market_structure_engine import run_market_structure_shadow
+
+            ms_record = await run_market_structure_shadow(
+                db=db,
+                underlying=payload.underlying,
+                signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
+                signal_v2_decision=getattr(signal, "decision", None),
+            )
+            if ms_record is not None:
+                shadow_market_structure_engine = {
+                    "evaluation_id": ms_record.evaluation_id,
+                    "engine_name": ms_record.engine_name,
+                    "verdict": ms_record.verdict,
+                    "score": ms_record.score,
+                }
+        except Exception as _ms_e:
+            import logging as _logging3
+
+            _logging3.getLogger(__name__).warning(f"MS engine shadow logging failed (non-fatal): {_ms_e}")
         candidate_tracking = await self._ensure_selected_option_tracked(db, signal)
         decision = self._entry_decision(db, signal, payload)
         AuditLogger().log(
@@ -209,6 +252,8 @@ class LivePaperSimulatorService:
                 "reason": decision.get("rejection_reason"),
                 "candidate_tracking": candidate_tracking,
                 "shadow_option_chain_engine": shadow_option_chain_engine,
+                "shadow_context_classifier": shadow_context_classifier,
+                "shadow_market_structure_engine": shadow_market_structure_engine,
             },
         )
         if not decision["entry_allowed"]:
@@ -224,7 +269,7 @@ class LivePaperSimulatorService:
             birth_cert = getattr(signal, "birth_certificate", None)
             if birth_cert is None and isinstance(signal, dict):
                 birth_cert = signal.get("birth_certificate")
-            trade = self._create_paper_trade(db, signal, birth_certificate=birth_cert)
+            trade = self._create_paper_trade(db, signal, birth_certificate=birth_cert, context_record=shadow_context_classifier)
         except PaperTradeBlockedError as exc:
             decision = {**decision, "entry_allowed": False, "rejection_reason": "PAPER_ENGINE_BLOCKED", "reasons": exc.reasons}
             self._reject(db, payload.underlying, "PAPER_ENGINE_BLOCKED", decision)
@@ -530,7 +575,7 @@ class LivePaperSimulatorService:
         )
         return {"ok": True, "status": result.get("status", "SUBSCRIBE_REQUESTED"), "item": item}
 
-    def _create_paper_trade(self, db: Session, signal, birth_certificate: dict = None) -> PaperTrade:
+    def _create_paper_trade(self, db: Session, signal, birth_certificate: dict = None, context_record: dict | None = None) -> PaperTrade:
         option = signal.selected_option
         entry = float(option.ltp)
         stop_loss = round(entry * (1 - settings.live_paper_stop_loss_percent / 100), 2)
@@ -562,10 +607,17 @@ class LivePaperSimulatorService:
             signal_type=signal.decision,
             signal_reason=self._paper_signal_reason(signal),
             data_source=SIMULATOR_SOURCE,
+            context_type_at_entry=(context_record or {}).get("context_type"),
+            context_confidence_at_entry=(context_record or {}).get("context_confidence"),
+            confidence_modifier_at_entry=(context_record or {}).get("confidence_modifier"),
         )
         trade = PaperEngine().create_trade(db, payload)
 
         import json
+        if context_record is not None and isinstance(context_record, dict):
+            trade.context_type_at_entry = context_record.get("context_type")
+            trade.context_confidence_at_entry = context_record.get("context_confidence")
+            trade.confidence_modifier_at_entry = context_record.get("confidence_modifier")
         if birth_certificate is not None and isinstance(birth_certificate, dict):
             trade.filter_states_json = json.dumps(birth_certificate.get("filter_states", {}))
             trade.confidence_score_at_entry = birth_certificate.get("confidence_score")
@@ -583,6 +635,9 @@ class LivePaperSimulatorService:
             trade.spread_pct_at_entry = birth_certificate.get("spread_pct")
             trade.filters_passed_count = birth_certificate.get("filters_passed_count")
             trade.birth_cert_version = "1.0"
+            db.commit()
+            db.refresh(trade)
+        elif context_record:
             db.commit()
             db.refresh(trade)
 

@@ -16,6 +16,7 @@ from app.schemas.data_quality import DataQualityCheckResult, SymbolQualitySummar
 from app.schemas.live_candle import LiveInstrumentMetadata
 from app.services.live_feed_service import get_live_feed_service
 from app.services.live_market_monitor_service import get_live_market_monitor_service
+from app.services.dhan_rest_quota_service import get_dhan_rest_quota_service
 
 
 class DataQualityService:
@@ -40,6 +41,7 @@ class DataQualityService:
             "stale_symbols_count": len(stale),
             "last_check_at": self.store.last_check_at,
             "overall_status": "OK" if tracked_count and not stale else "NO_DATA" if not tracked_count else "WARNING",
+            "dhan_rest_quota": get_dhan_rest_quota_service().status(),
             "mode": settings.trading_mode,
             "live_order_status": settings.safety_status["live_order_status"],
         }
@@ -57,6 +59,7 @@ class DataQualityService:
             "min_candles_for_gap_check": settings.data_quality_min_candles_for_gap_check,
             "max_history": settings.data_quality_max_history,
             "audit_throttle_seconds": settings.data_quality_audit_throttle_seconds,
+            "shared_dhan_rest_quota_guard": settings.enable_dhan_rest_quota_guard,
         }
 
     async def get_symbol(self, db: Session, symbol: str) -> SymbolQualitySummary:

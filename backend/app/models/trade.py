@@ -101,6 +101,9 @@ class PaperTrade(Base):
     spread_pct_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
     filters_passed_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     birth_cert_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    context_type_at_entry: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    context_confidence_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_modifier_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class PaperTradeCreate(BaseModel):
@@ -127,6 +130,9 @@ class PaperTradeCreate(BaseModel):
     signal_type: str | None = Field(default=None, max_length=20)
     signal_reason: str | None = Field(default=None, max_length=500)
     data_source: str = Field(default="MOCK", max_length=50)
+    context_type_at_entry: str | None = Field(default=None, max_length=50)
+    context_confidence_at_entry: float | None = Field(default=None, ge=0, le=1)
+    confidence_modifier_at_entry: float | None = None
 
     @field_validator("symbol", "exchange", mode="before")
     @classmethod
@@ -186,6 +192,9 @@ class PaperTradeRead(BaseModel):
     spread_pct_at_entry: float | None = None
     filters_passed_count: int | None = None
     birth_cert_version: str | None = None
+    context_type_at_entry: str | None = None
+    context_confidence_at_entry: float | None = None
+    confidence_modifier_at_entry: float | None = None
 
     model_config = {"from_attributes": True}
 

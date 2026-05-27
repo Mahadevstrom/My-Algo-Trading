@@ -64,7 +64,9 @@ def init_db() -> None:
     from app.models.strategy import CustomStrategy
     from app.models.trade import PaperTrade, PaperOptionCombo
     from app.agent_evolution.models import AgentEvolutionRecommendation
+    from app.engine.context.models import ContextClassificationLog
     from app.engine.specialist.models import LabelRecord, SpecialistEngineLog
+    from app.engine.setup.models import SetupDefinition, SetupMatchLog
 
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite_columns()
@@ -107,6 +109,9 @@ def _migrate_sqlite_columns() -> None:
         "spread_pct_at_entry": "FLOAT",
         "filters_passed_count": "INTEGER",
         "birth_cert_version": "VARCHAR(20)",
+        "context_type_at_entry": "VARCHAR(50)",
+        "context_confidence_at_entry": "FLOAT",
+        "confidence_modifier_at_entry": "FLOAT",
     }
     with engine.begin() as connection:
         for column_name, column_type in columns_to_add.items():
@@ -150,6 +155,9 @@ def _migrate_postgresql_columns() -> None:
         "spread_pct_at_entry": "DOUBLE PRECISION",
         "filters_passed_count": "INTEGER",
         "birth_cert_version": "VARCHAR(20)",
+        "context_type_at_entry": "VARCHAR(50)",
+        "context_confidence_at_entry": "DOUBLE PRECISION",
+        "confidence_modifier_at_entry": "DOUBLE PRECISION",
     }
 
     with engine.begin() as connection:

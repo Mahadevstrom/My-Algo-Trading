@@ -186,6 +186,7 @@ type IndexSymbol = 'NIFTY' | 'BANKNIFTY';
         <span>{{fiiDii?.latest_record_date || 'No latest date'}}</span>
         <span>{{fiiDii?.data_freshness || 'NO_DATA'}}</span>
         <span *ngIf="fiiDii?.dii_supporting_fii_selling">DII absorbing FII selling</span>
+        <span *ngIf="fiiDii?.import_required">{{fiiDii?.import_hint || 'Import FII/DII cash data'}}</span>
       </div>
     </div>
 

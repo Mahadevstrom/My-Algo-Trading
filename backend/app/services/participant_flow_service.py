@@ -18,6 +18,7 @@ class ParticipantFlowService:
         latest_date = db.scalar(select(func.max(ParticipantFlowRecord.market_date)))
         latest_import = db.scalar(select(func.max(ParticipantFlowRecord.imported_at)))
         count = db.scalar(select(func.count(ParticipantFlowRecord.id))) or 0
+        freshness = self._freshness(latest_date)
         return {
             "enabled": settings.enable_participant_flow_engine,
             "data_mode": settings.participant_flow_data_mode,
@@ -25,6 +26,10 @@ class ParticipantFlowService:
             "latest_record_date": latest_date.isoformat() if latest_date else None,
             "latest_import_at": latest_import.isoformat() if latest_import else None,
             "record_count": count,
+            "data_freshness": freshness,
+            "data_ready": bool(count and freshness != "STALE_DATA"),
+            "readiness": "READY" if count and freshness != "STALE_DATA" else "IMPORT_REQUIRED",
+            "import_guidance": self.import_guidance(),
             "live_order_status": settings.safety_status["live_order_status"],
             "supported_segments": sorted(VALID_SEGMENTS),
         }
@@ -34,9 +39,22 @@ class ParticipantFlowService:
         cash = [row for row in records if row.segment == "CASH"]
         fii = [row for row in cash if row.participant_type == "FII"]
         dii = [row for row in cash if row.participant_type == "DII"]
+        if (not fii and not dii) and settings.participant_flow_allow_web_fetch:
+            self._refresh_from_nse(db)
+            records = self._records(db, None, lookback_days)
+            cash = [row for row in records if row.segment == "CASH"]
+            fii = [row for row in cash if row.participant_type == "FII"]
+            dii = [row for row in cash if row.participant_type == "DII"]
         if not fii and not dii:
             return self._no_data("NO_FII_DII_DATA", "No FII/DII cash participant-flow records found.")
         latest_date = max(row.market_date for row in cash) if cash else None
+        if latest_date and self._freshness(latest_date) == "STALE_DATA" and settings.participant_flow_allow_web_fetch:
+            self._refresh_from_nse(db)
+            records = self._records(db, None, lookback_days)
+            cash = [row for row in records if row.segment == "CASH"]
+            fii = [row for row in cash if row.participant_type == "FII"]
+            dii = [row for row in cash if row.participant_type == "DII"]
+            latest_date = max(row.market_date for row in cash) if cash else None
         fii_net = _sum(fii, "net_value")
         dii_net = _sum(dii, "net_value")
         bias = _cash_bias(fii_net, dii_net)
@@ -270,7 +288,41 @@ class ParticipantFlowService:
         return reasons
 
     def _no_data(self, status: str, message: str) -> dict[str, Any]:
-        return {"ok": False, "status": status, "message": message, "missing_data": ["participant_flow_records"]}
+        return {
+            "ok": False,
+            "status": status,
+            "message": message,
+            "missing_data": ["participant_flow_records"],
+            "data_mode": settings.participant_flow_data_mode,
+            "import_required": True,
+            "import_hint": "FII/DII cash flow is not a live Dhan feed. Import official/provisional cash flow when available.",
+            "import_guidance": self.import_guidance(),
+        }
+
+    def import_guidance(self) -> dict[str, Any]:
+        return {
+            "status": "MANUAL_IMPORT_REQUIRED",
+            "why": "FII/DII cash flow is delayed institutional data, so the app stores it from manual/official imports instead of treating it as a live tick feed.",
+            "quick_import_endpoint": "/api/participant-flow/import-fii-dii-cash",
+            "full_import_endpoint": "/api/participant-flow/import",
+            "nse_fetch_endpoint": "/api/participant-flow/fetch-nse",
+            "template_endpoint": "/api/participant-flow/import-template",
+            "sample_quick_payload": {
+                "market_date": date.today().isoformat(),
+                "source": "MANUAL_FII_DII",
+                "fii_cash_net": -2000.0,
+                "dii_cash_net": 2000.0,
+                "is_provisional": True,
+            },
+        }
+
+    def _refresh_from_nse(self, db: Session) -> None:
+        try:
+            from app.services.participant_flow_nse_service import get_participant_flow_nse_service
+
+            get_participant_flow_nse_service().fetch_and_import(db)
+        except Exception:
+            return
 
     def _audit(self, db: Session, event_type: str, message: str, severity: str) -> None:
         if not settings.participant_flow_enable_audit:

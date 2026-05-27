@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.schemas.participant_flow import ParticipantFlowImportRequest
+from app.schemas.participant_flow import ParticipantFlowCashQuickImportRequest, ParticipantFlowImportRequest
 from app.services.participant_flow_import_service import get_participant_flow_import_service
+from app.services.participant_flow_nse_service import get_participant_flow_nse_service
 from app.services.participant_flow_service import get_participant_flow_service
 
 
@@ -22,6 +23,81 @@ def import_participant_flow(
     db: Session = Depends(get_db),
 ) -> dict:
     return get_participant_flow_import_service().import_records(db, request)
+
+
+@router.get("/import-template")
+def participant_flow_import_template() -> dict:
+    service = get_participant_flow_service()
+    return {
+        "ok": True,
+        "message": "Use quick import for daily FII/DII cash net values, or full import for derivatives/participant records.",
+        "guidance": service.import_guidance(),
+        "full_import_payload": {
+            "records": [
+                {
+                    "market_date": "2026-05-26",
+                    "source": "MANUAL_FII_DII",
+                    "segment": "CASH",
+                    "participant_type": "FII",
+                    "net_value": -2000.0,
+                    "is_provisional": True,
+                },
+                {
+                    "market_date": "2026-05-26",
+                    "source": "MANUAL_FII_DII",
+                    "segment": "CASH",
+                    "participant_type": "DII",
+                    "net_value": 2000.0,
+                    "is_provisional": True,
+                },
+            ]
+        },
+    }
+
+
+@router.post("/import-fii-dii-cash")
+def import_fii_dii_cash(
+    request: ParticipantFlowCashQuickImportRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    records = []
+    if request.fii_cash_net is not None:
+        records.append(
+            {
+                "market_date": request.market_date,
+                "source": request.source,
+                "segment": "CASH",
+                "participant_type": "FII",
+                "net_value": request.fii_cash_net,
+                "is_provisional": request.is_provisional,
+            }
+        )
+    if request.dii_cash_net is not None:
+        records.append(
+            {
+                "market_date": request.market_date,
+                "source": request.source,
+                "segment": "CASH",
+                "participant_type": "DII",
+                "net_value": request.dii_cash_net,
+                "is_provisional": request.is_provisional,
+            }
+        )
+    result = get_participant_flow_import_service().import_records(db, ParticipantFlowImportRequest(records=records))
+    result["quick_import"] = True
+    result["context_after_import"] = get_participant_flow_service().context(db, "NIFTY")
+    return result
+
+
+@router.post("/fetch-nse")
+def fetch_nse_fii_dii(
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+) -> dict:
+    result = get_participant_flow_nse_service().fetch_and_import(db, force=force)
+    if result.get("ok"):
+        result["context_after_import"] = get_participant_flow_service().context(db, "NIFTY")
+    return result
 
 
 @router.get("/fii-dii")

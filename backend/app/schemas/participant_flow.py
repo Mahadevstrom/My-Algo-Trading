@@ -95,6 +95,25 @@ class ParticipantFlowImportRequest(BaseModel):
     records: list[ParticipantFlowRecordCreate] = Field(default_factory=list)
 
 
+class ParticipantFlowCashQuickImportRequest(BaseModel):
+    market_date: date = Field(default_factory=date.today)
+    source: str = "MANUAL_FII_DII"
+    fii_cash_net: float | None = None
+    dii_cash_net: float | None = None
+    is_provisional: bool = True
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source(cls, value: Any) -> Any:
+        return str(value or "MANUAL_FII_DII").strip().upper()
+
+    @model_validator(mode="after")
+    def require_cash_flow(self) -> "ParticipantFlowCashQuickImportRequest":
+        if self.fii_cash_net is None and self.dii_cash_net is None:
+            raise ValueError("At least one of fii_cash_net or dii_cash_net is required.")
+        return self
+
+
 class ParticipantFlowRecordResponse(BaseModel):
     id: int
     source: str

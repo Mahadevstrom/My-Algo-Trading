@@ -23,6 +23,48 @@ async def _log_option_chain_shadow(db: Session, underlying: str, signal_result) 
         pass
 
 
+def _log_context_shadow(db: Session, underlying: str, signal_result) -> None:
+    try:
+        from app.engine.context.context_classifier import run_context_shadow
+
+        run_context_shadow(
+            db=db,
+            underlying=underlying,
+            signal_result=signal_result,
+            signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
+            signal_v2_decision=getattr(signal_result, "decision", None),
+        )
+    except Exception:
+        pass
+
+
+async def _log_market_structure_shadow(db: Session, underlying: str, signal_result) -> None:
+    try:
+        from app.engine.specialist.market_structure_engine import run_market_structure_shadow
+
+        await run_market_structure_shadow(
+            db=db,
+            underlying=underlying,
+            signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
+            signal_v2_decision=getattr(signal_result, "decision", None),
+        )
+    except Exception:
+        pass
+
+
+def _log_setup_matcher_shadow(db: Session, signal_result) -> None:
+    try:
+        from app.engine.setup.setup_shadow_runner import run_setup_matcher_shadow
+
+        run_setup_matcher_shadow(
+            db=db,
+            signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
+            signal_v2_decision=getattr(signal_result, "decision", None),
+        )
+    except Exception:
+        pass
+
+
 @router.get("/status")
 async def signal_v2_status() -> dict:
     return await get_signal_engine_v2().status()
@@ -35,6 +77,9 @@ async def generate_signal_v2(
 ) -> dict:
     result = await get_signal_engine_v2().generate(db, request)
     await _log_option_chain_shadow(db, request.underlying, result)
+    _log_context_shadow(db, request.underlying, result)
+    await _log_market_structure_shadow(db, request.underlying, result)
+    _log_setup_matcher_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 
@@ -42,6 +87,9 @@ async def generate_signal_v2(
 async def analyze_nifty_v2(db: Session = Depends(get_db)) -> dict:
     result = await get_signal_engine_v2().analyze_nifty(db)
     await _log_option_chain_shadow(db, "NIFTY", result)
+    _log_context_shadow(db, "NIFTY", result)
+    await _log_market_structure_shadow(db, "NIFTY", result)
+    _log_setup_matcher_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 

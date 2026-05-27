@@ -76,9 +76,18 @@ class Settings(BaseModel):
     market_data_mode: str = Field(
         default_factory=lambda: os.getenv("MARKET_DATA_MODE", "DHAN").strip().upper()
     )
-    dhan_data_enabled: bool = Field(default_factory=lambda: _env_bool("DHAN_DATA_ENABLED", False))
+    dhan_data_enabled: bool = Field(default_factory=lambda: _env_bool("DHAN_DATA_ENABLED", True))
     dhan_base_url: str = Field(
         default_factory=lambda: os.getenv("DHAN_BASE_URL", "https://api.dhan.co/v2")
+    )
+    enable_dhan_rest_quota_guard: bool = Field(default_factory=lambda: _env_bool("ENABLE_DHAN_REST_QUOTA_GUARD", True))
+    dhan_rest_quota_per_minute: int = Field(default_factory=lambda: _env_int("DHAN_REST_QUOTA_PER_MINUTE", 8))
+    dhan_rest_min_gap_seconds: float = Field(default_factory=lambda: _env_float("DHAN_REST_MIN_GAP_SECONDS", 3.25))
+    dhan_rest_response_cache_seconds: float = Field(
+        default_factory=lambda: _env_float("DHAN_REST_RESPONSE_CACHE_SECONDS", 2.0)
+    )
+    dhan_rest_rate_limit_cooldown_seconds: float = Field(
+        default_factory=lambda: _env_float("DHAN_REST_RATE_LIMIT_COOLDOWN_SECONDS", 30.0)
     )
     indstocks_enabled: bool = Field(
         default_factory=lambda: _env_bool("ENABLE_INDSTOCKS", _env_bool("INDSTOCKS_ENABLED", False))
@@ -144,6 +153,26 @@ class Settings(BaseModel):
         default_factory=lambda: _env_int("LIVE_MARKET_STALE_AFTER_SECONDS", 15)
     )
     live_monitor_auto_start: bool = Field(default_factory=lambda: _env_bool("LIVE_MONITOR_AUTO_START", False))
+    enable_feed_watchdog: bool = Field(default_factory=lambda: _env_bool("ENABLE_FEED_WATCHDOG", True))
+    feed_watchdog_interval_seconds: int = Field(default_factory=lambda: _env_int("FEED_WATCHDOG_INTERVAL_SECONDS", 10))
+    feed_watchdog_auto_recover: bool = Field(default_factory=lambda: _env_bool("FEED_WATCHDOG_AUTO_RECOVER", True))
+    feed_watchdog_restart_on_stale: bool = Field(default_factory=lambda: _env_bool("FEED_WATCHDOG_RESTART_ON_STALE", True))
+    enable_startup_market_backfill: bool = Field(default_factory=lambda: _env_bool("ENABLE_STARTUP_MARKET_BACKFILL", True))
+    market_backfill_symbols: str = Field(default_factory=lambda: os.getenv("MARKET_BACKFILL_SYMBOLS", "NIFTY"))
+    market_backfill_source_interval: str = Field(default_factory=lambda: os.getenv("MARKET_BACKFILL_SOURCE_INTERVAL", "1"))
+    market_backfill_start_time: str = Field(default_factory=lambda: os.getenv("MARKET_BACKFILL_START_TIME", "09:15:00"))
+    market_backfill_end_time: str = Field(default_factory=lambda: os.getenv("MARKET_BACKFILL_END_TIME", "15:30:00"))
+    market_backfill_run_after_market_open: bool = Field(
+        default_factory=lambda: _env_bool("MARKET_BACKFILL_RUN_AFTER_MARKET_OPEN", True)
+    )
+    enable_setup_matcher: bool = Field(default_factory=lambda: _env_bool("ENABLE_SETUP_MATCHER", True))
+    setup_matcher_evidence_window_seconds: int = Field(
+        default_factory=lambda: _env_int("SETUP_MATCHER_EVIDENCE_WINDOW_SECONDS", 60)
+    )
+    setup_matcher_min_historical_trades: int = Field(
+        default_factory=lambda: _env_int("SETUP_MATCHER_MIN_HISTORICAL_TRADES", 5)
+    )
+    setup_seeder_on_startup: bool = Field(default_factory=lambda: _env_bool("SETUP_SEEDER_ON_STARTUP", True))
     enable_test_tick_ingest: bool = Field(default_factory=lambda: _env_bool("ENABLE_TEST_TICK_INGEST", False))
     enable_data_quality_engine: bool = Field(default_factory=lambda: _env_bool("ENABLE_DATA_QUALITY_ENGINE", True))
     data_quality_rest_cross_check: bool = Field(default_factory=lambda: _env_bool("DATA_QUALITY_REST_CROSS_CHECK", True))
@@ -185,6 +214,27 @@ class Settings(BaseModel):
     )
     oc_engine_pcr_bullish_threshold: float = Field(
         default_factory=lambda: _env_float("OC_ENGINE_PCR_BULLISH_THRESHOLD", 0.8)
+    )
+    enable_context_classifier: bool = Field(default_factory=lambda: _env_bool("ENABLE_CONTEXT_CLASSIFIER", True))
+    context_vix_high_threshold: float = Field(default_factory=lambda: _env_float("CONTEXT_VIX_HIGH_THRESHOLD", 18.0))
+    context_vix_low_threshold: float = Field(default_factory=lambda: _env_float("CONTEXT_VIX_LOW_THRESHOLD", 13.0))
+    context_gap_large_threshold: float = Field(default_factory=lambda: _env_float("CONTEXT_GAP_LARGE_THRESHOLD", 1.0))
+    context_gap_small_threshold: float = Field(default_factory=lambda: _env_float("CONTEXT_GAP_SMALL_THRESHOLD", 0.5))
+    context_expiry_afternoon_hour: int = Field(default_factory=lambda: _env_int("CONTEXT_EXPIRY_AFTERNOON_HOUR", 13))
+    context_expiry_afternoon_minute: int = Field(default_factory=lambda: _env_int("CONTEXT_EXPIRY_AFTERNOON_MINUTE", 30))
+    context_expiry_morning_cutoff_hour: int = Field(default_factory=lambda: _env_int("CONTEXT_EXPIRY_MORNING_CUTOFF_HOUR", 11))
+    context_expiry_morning_cutoff_minute: int = Field(default_factory=lambda: _env_int("CONTEXT_EXPIRY_MORNING_CUTOFF_MINUTE", 30))
+    ms_engine_ema_fast: int = Field(default_factory=lambda: _env_int("MS_ENGINE_EMA_FAST", 9))
+    ms_engine_ema_slow: int = Field(default_factory=lambda: _env_int("MS_ENGINE_EMA_SLOW", 21))
+    ms_engine_ema_trend: int = Field(default_factory=lambda: _env_int("MS_ENGINE_EMA_TREND", 50))
+    ms_engine_atr_period: int = Field(default_factory=lambda: _env_int("MS_ENGINE_ATR_PERIOD", 14))
+    ms_engine_min_candles: int = Field(default_factory=lambda: _env_int("MS_ENGINE_MIN_CANDLES", 10))
+    ms_engine_ranging_crossings: int = Field(default_factory=lambda: _env_int("MS_ENGINE_RANGING_CROSSINGS", 3))
+    ms_engine_strong_candle_ratio: float = Field(
+        default_factory=lambda: _env_float("MS_ENGINE_STRONG_CANDLE_RATIO", 0.60)
+    )
+    ms_engine_high_atr_threshold: float = Field(
+        default_factory=lambda: _env_float("MS_ENGINE_HIGH_ATR_THRESHOLD", 0.004)
     )
     signal_v2_min_score: int = Field(default_factory=lambda: _env_int("SIGNAL_V2_MIN_SCORE", 75))
     signal_v2_primary_timeframe: str = Field(default_factory=lambda: os.getenv("SIGNAL_V2_PRIMARY_TIMEFRAME", "5m"))
@@ -431,10 +481,10 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("PARTICIPANT_FLOW_DEFAULT_SYMBOL", "NIFTY").strip().upper()
     )
     participant_flow_data_mode: str = Field(
-        default_factory=lambda: os.getenv("PARTICIPANT_FLOW_DATA_MODE", "MANUAL_IMPORT").strip().upper()
+        default_factory=lambda: os.getenv("PARTICIPANT_FLOW_DATA_MODE", "NSE_PUBLIC").strip().upper()
     )
     participant_flow_allow_web_fetch: bool = Field(
-        default_factory=lambda: _env_bool("PARTICIPANT_FLOW_ALLOW_WEB_FETCH", False)
+        default_factory=lambda: _env_bool("PARTICIPANT_FLOW_ALLOW_WEB_FETCH", True)
     )
     participant_flow_store_raw: bool = Field(default_factory=lambda: _env_bool("PARTICIPANT_FLOW_STORE_RAW", False))
     participant_flow_lookback_days: int = Field(default_factory=lambda: _env_int("PARTICIPANT_FLOW_LOOKBACK_DAYS", 10))
@@ -556,6 +606,10 @@ class Settings(BaseModel):
         return _env_list("LIVE_FEED_DEFAULT_SYMBOLS", self.live_feed_default_symbols)
 
     @property
+    def market_backfill_symbols_list(self) -> list[str]:
+        return _env_list("MARKET_BACKFILL_SYMBOLS", self.market_backfill_symbols)
+
+    @property
     def signal_v2_entry_timeframes_list(self) -> list[str]:
         return _env_list("SIGNAL_V2_ENTRY_TIMEFRAMES", self.signal_v2_entry_timeframes)
 
@@ -601,6 +655,10 @@ class Settings(BaseModel):
             "market_data_mode": self.market_data_mode,
             "dhan_data_enabled": self.dhan_data_enabled,
             "dhan_base_url": self.dhan_base_url,
+            "dhan_rest_quota_guard_enabled": self.enable_dhan_rest_quota_guard,
+            "dhan_rest_quota_per_minute": self.dhan_rest_quota_per_minute,
+            "dhan_rest_min_gap_seconds": self.dhan_rest_min_gap_seconds,
+            "dhan_rest_response_cache_seconds": self.dhan_rest_response_cache_seconds,
             "indstocks_enabled": self.indstocks_enabled,
             "indstocks_credentials_configured": self.has_indstocks_credentials,
             "indstocks_base_url": self.indstocks_base_url,
@@ -630,6 +688,12 @@ class Settings(BaseModel):
             "live_candle_max_history": self.live_candle_max_history,
             "live_market_stale_after_seconds": self.live_market_stale_after_seconds,
             "live_monitor_auto_start": self.live_monitor_auto_start,
+            "feed_watchdog_enabled": self.enable_feed_watchdog,
+            "feed_watchdog_interval_seconds": self.feed_watchdog_interval_seconds,
+            "feed_watchdog_auto_recover": self.feed_watchdog_auto_recover,
+            "startup_market_backfill_enabled": self.enable_startup_market_backfill,
+            "market_backfill_symbols": self.market_backfill_symbols_list,
+            "market_backfill_source_interval": self.market_backfill_source_interval,
             "test_tick_ingest_enabled": self.enable_test_tick_ingest,
             "data_quality_enabled": self.enable_data_quality_engine,
             "data_quality_rest_cross_check": self.data_quality_rest_cross_check,
