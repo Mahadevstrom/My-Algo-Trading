@@ -12,6 +12,10 @@ from app.db.database import get_db
 from app.engine.specialist.label_importer import import_jsonl_labels, import_xlsx_labels
 from app.engine.specialist.market_structure_engine import MarketStructureEngine, build_market_structure_data
 from app.engine.specialist.models import LabelRecord, SpecialistEngineLog
+from app.engine.specialist.nifty_momentum_engine import (
+    NiftyMomentumValidationEngine,
+    build_nifty_momentum_data,
+)
 from app.engine.specialist.option_chain_engine import OptionChainEngine, build_option_chain_market_data
 from app.engine.specialist.shadow_logger import log_engine_evidence
 
@@ -124,6 +128,34 @@ def latest_market_structure_engine(db: Session = Depends(get_db)) -> dict:
     record = (
         db.query(SpecialistEngineLog)
         .filter(SpecialistEngineLog.engine_name == "market_structure_engine")
+        .order_by(SpecialistEngineLog.created_at.desc(), SpecialistEngineLog.id.desc())
+        .first()
+    )
+    if not record:
+        return {"status": "NO_DATA"}
+    return _log_to_dict(record)
+
+
+@router.get("/nifty-momentum-engine/evaluate")
+async def evaluate_nifty_momentum_engine(
+    underlying: str = Query(default="NIFTY"),
+    db: Session = Depends(get_db),
+) -> dict:
+    market_data = await build_nifty_momentum_data(db, underlying)
+    evidence = NiftyMomentumValidationEngine().safe_evaluate(market_data)
+    evidence.evaluation_id = str(uuid.uuid4())
+    try:
+        log_engine_evidence(db, evidence)
+    except Exception:
+        pass
+    return evidence.model_dump(mode="json")
+
+
+@router.get("/nifty-momentum-engine/latest")
+def latest_nifty_momentum_engine(db: Session = Depends(get_db)) -> dict:
+    record = (
+        db.query(SpecialistEngineLog)
+        .filter(SpecialistEngineLog.engine_name == "nifty_momentum_engine")
         .order_by(SpecialistEngineLog.created_at.desc(), SpecialistEngineLog.id.desc())
         .first()
     )

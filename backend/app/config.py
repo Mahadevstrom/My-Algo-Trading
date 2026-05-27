@@ -236,6 +236,7 @@ class Settings(BaseModel):
     ms_engine_high_atr_threshold: float = Field(
         default_factory=lambda: _env_float("MS_ENGINE_HIGH_ATR_THRESHOLD", 0.004)
     )
+    enable_nifty_momentum_engine: bool = Field(default_factory=lambda: _env_bool("ENABLE_NIFTY_MOMENTUM_ENGINE", True))
     signal_v2_min_score: int = Field(default_factory=lambda: _env_int("SIGNAL_V2_MIN_SCORE", 75))
     signal_v2_primary_timeframe: str = Field(default_factory=lambda: os.getenv("SIGNAL_V2_PRIMARY_TIMEFRAME", "5m"))
     signal_v2_confirm_timeframe: str = Field(default_factory=lambda: os.getenv("SIGNAL_V2_CONFIRM_TIMEFRAME", "15m"))

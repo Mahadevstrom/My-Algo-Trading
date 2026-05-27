@@ -178,6 +178,7 @@ class LivePaperSimulatorService:
         shadow_option_chain_engine = None
         shadow_context_classifier = None
         shadow_market_structure_engine = None
+        shadow_nifty_momentum_engine = None
         try:
             from app.engine.specialist.option_chain_engine import run_option_chain_shadow
 
@@ -239,6 +240,26 @@ class LivePaperSimulatorService:
             import logging as _logging3
 
             _logging3.getLogger(__name__).warning(f"MS engine shadow logging failed (non-fatal): {_ms_e}")
+        try:
+            from app.engine.specialist.nifty_momentum_engine import run_nifty_momentum_shadow
+
+            momentum_record = await run_nifty_momentum_shadow(
+                db=db,
+                underlying=payload.underlying,
+                signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
+                signal_v2_decision=getattr(signal, "decision", None),
+            )
+            if momentum_record is not None:
+                shadow_nifty_momentum_engine = {
+                    "evaluation_id": momentum_record.evaluation_id,
+                    "engine_name": momentum_record.engine_name,
+                    "verdict": momentum_record.verdict,
+                    "score": momentum_record.score,
+                }
+        except Exception as _mom_e:
+            import logging as _logging4
+
+            _logging4.getLogger(__name__).warning(f"NIFTY momentum shadow logging failed (non-fatal): {_mom_e}")
         candidate_tracking = await self._ensure_selected_option_tracked(db, signal)
         decision = self._entry_decision(db, signal, payload)
         AuditLogger().log(
@@ -254,6 +275,7 @@ class LivePaperSimulatorService:
                 "shadow_option_chain_engine": shadow_option_chain_engine,
                 "shadow_context_classifier": shadow_context_classifier,
                 "shadow_market_structure_engine": shadow_market_structure_engine,
+                "shadow_nifty_momentum_engine": shadow_nifty_momentum_engine,
             },
         )
         if not decision["entry_allowed"]:

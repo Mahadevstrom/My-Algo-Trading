@@ -52,6 +52,20 @@ async def _log_market_structure_shadow(db: Session, underlying: str, signal_resu
         pass
 
 
+async def _log_nifty_momentum_shadow(db: Session, underlying: str, signal_result) -> None:
+    try:
+        from app.engine.specialist.nifty_momentum_engine import run_nifty_momentum_shadow
+
+        await run_nifty_momentum_shadow(
+            db=db,
+            underlying=underlying,
+            signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
+            signal_v2_decision=getattr(signal_result, "decision", None),
+        )
+    except Exception:
+        pass
+
+
 def _log_setup_matcher_shadow(db: Session, signal_result) -> None:
     try:
         from app.engine.setup.setup_shadow_runner import run_setup_matcher_shadow
@@ -79,6 +93,7 @@ async def generate_signal_v2(
     await _log_option_chain_shadow(db, request.underlying, result)
     _log_context_shadow(db, request.underlying, result)
     await _log_market_structure_shadow(db, request.underlying, result)
+    await _log_nifty_momentum_shadow(db, request.underlying, result)
     _log_setup_matcher_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
@@ -89,6 +104,7 @@ async def analyze_nifty_v2(db: Session = Depends(get_db)) -> dict:
     await _log_option_chain_shadow(db, "NIFTY", result)
     _log_context_shadow(db, "NIFTY", result)
     await _log_market_structure_shadow(db, "NIFTY", result)
+    await _log_nifty_momentum_shadow(db, "NIFTY", result)
     _log_setup_matcher_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
