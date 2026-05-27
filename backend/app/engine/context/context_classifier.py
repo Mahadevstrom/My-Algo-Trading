@@ -359,16 +359,16 @@ def _banknifty_momentum(db: Session, market_data: dict[str, Any]) -> str:
         return ""
 
     if change_pct is None:
-        return f"BANKNIFTY momentum is {direction}; use it only as cross-market validation, not as a trade trigger."
+        return f"NIFTY Bank/BANKNIFTY momentum is {direction}; use it only as cross-market validation, not as a trade trigger."
     return (
-        f"BANKNIFTY momentum is {direction} ({change_pct:+.2f}%); "
+        f"NIFTY Bank/BANKNIFTY momentum is {direction} ({change_pct:+.2f}%); "
         "use it only as cross-market validation, not as a trade trigger."
     )
 
 
 def _latest_index_momentum(db: Session, underlying: str) -> tuple[str, float | None] | None:
     try:
-        symbol = underlying.strip().upper()
+        aliases = _index_aliases(underlying)
         rows = list(
             db.scalars(
                 select(LiveCandleRecord)
@@ -376,8 +376,8 @@ def _latest_index_momentum(db: Session, underlying: str) -> tuple[str, float | N
                     LiveCandleRecord.timeframe.in_(["5m", "5min"]),
                     LiveCandleRecord.close > 0,
                     or_(
-                        LiveCandleRecord.symbol == symbol,
-                        LiveCandleRecord.underlying == symbol,
+                        LiveCandleRecord.symbol.in_(aliases),
+                        LiveCandleRecord.underlying.in_(aliases),
                     ),
                     LiveCandleRecord.option_type.is_(None),
                 )
@@ -400,6 +400,18 @@ def _latest_index_momentum(db: Session, underlying: str) -> tuple[str, float | N
     if change_pct <= -0.25:
         return "BEARISH", change_pct
     return None
+
+
+def _index_aliases(underlying: str) -> list[str]:
+    normalized = (underlying or "NIFTY").strip().upper().replace("_", " ")
+    aliases = {
+        "BANKNIFTY": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTY BANK": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTYBANK": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTY": ["NIFTY", "NIFTY 50"],
+        "NIFTY 50": ["NIFTY", "NIFTY 50"],
+    }
+    return aliases.get(normalized, [normalized])
 
 
 def _normalize_data_quality(value: Any) -> str:

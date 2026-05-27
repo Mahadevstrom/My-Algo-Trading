@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -16,7 +16,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base, get_db
 from app.engine.specialist.base import EngineEvidence
-from app.engine.specialist.market_structure_engine import MarketStructureEngine
+from app.engine.specialist.market_structure_engine import MarketStructureEngine, build_market_structure_data
+from app.models.live_candle import LiveCandleRecord
 from app.engine.specialist.models import SpecialistEngineLog
 from app.engine.specialist.routes import router as specialist_router
 from app.engine.specialist.shadow_logger import log_engine_evidence
@@ -199,6 +200,33 @@ class TestMarketStructureEngine(unittest.TestCase):
         self.assertIsInstance(payload, list)
         if payload:
             self.assertIn("engines", payload[0])
+
+    def test_13_nifty_bank_alias_finds_persisted_candles(self):
+        start = datetime.now(timezone.utc).replace(hour=4, minute=0, second=0, microsecond=0)
+        for index in range(12):
+            self.db.add(
+                LiveCandleRecord(
+                    source="TEST",
+                    exchange_segment="IDX_I",
+                    security_id="NIFTY BANK",
+                    symbol="NIFTY BANK",
+                    underlying="NIFTY BANK",
+                    timeframe="5m",
+                    start_time=start + timedelta(minutes=5 * index),
+                    end_time=start + timedelta(minutes=5 * (index + 1)),
+                    open=54000 + index,
+                    high=54010 + index,
+                    low=53990 + index,
+                    close=54005 + index,
+                    volume=1000,
+                    is_closed=True,
+                )
+            )
+        self.db.commit()
+
+        data = __import__("asyncio").run(build_market_structure_data(self.db, "BANKNIFTY", "5min"))
+        self.assertGreaterEqual(data["candle_count"], 10)
+        self.assertEqual(data["candles"][-1]["close"], 54016.0)
 
 
 if __name__ == "__main__":

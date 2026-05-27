@@ -427,7 +427,7 @@ def _merge_candles(persisted_items: list[Any], memory_items: list[Any], limit: i
 
 
 def _persisted_candles(db: Session, underlying: str, timeframe: str, limit: int) -> list[LiveCandleRecord]:
-    normalized = (underlying or "NIFTY").strip().upper()
+    aliases = _underlying_aliases(underlying)
     try:
         return list(
             db.scalars(
@@ -436,9 +436,9 @@ def _persisted_candles(db: Session, underlying: str, timeframe: str, limit: int)
                     LiveCandleRecord.timeframe == timeframe,
                     LiveCandleRecord.close > 0,
                     or_(
-                        LiveCandleRecord.symbol == normalized,
-                        LiveCandleRecord.security_id == normalized,
-                        LiveCandleRecord.underlying == normalized,
+                        LiveCandleRecord.symbol.in_(aliases),
+                        LiveCandleRecord.security_id.in_(aliases),
+                        LiveCandleRecord.underlying.in_(aliases),
                     ),
                 )
                 .order_by(LiveCandleRecord.start_time.desc())
@@ -456,12 +456,13 @@ async def build_market_structure_data(
     timeframe: str = "5min",
 ) -> dict[str, Any]:
     normalized_timeframe = _normalize_timeframe(timeframe)
+    aliases = _underlying_aliases(underlying)
     try:
-        memory_items = await get_live_market_monitor_service().store.get_candles(
-            (underlying or "NIFTY").strip().upper(),
-            normalized_timeframe,
-            80,
-        )
+        memory_items = []
+        for alias in aliases:
+            memory_items = await get_live_market_monitor_service().store.get_candles(alias, normalized_timeframe, 80)
+            if memory_items:
+                break
     except Exception as exc:
         logger.warning(f"MS engine live candle lookup failed (non-fatal): {exc}")
         memory_items = []
@@ -474,6 +475,18 @@ async def build_market_structure_data(
         "candle_count": len(candles),
         "data_source": "LIVE_MARKET_MONITOR" if candles else "UNAVAILABLE",
     }
+
+
+def _underlying_aliases(underlying: str) -> list[str]:
+    normalized = (underlying or "NIFTY").strip().upper().replace("_", " ")
+    aliases = {
+        "BANKNIFTY": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTY BANK": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTYBANK": ["BANKNIFTY", "NIFTY BANK", "NIFTYBANK"],
+        "NIFTY": ["NIFTY", "NIFTY 50"],
+        "NIFTY 50": ["NIFTY", "NIFTY 50"],
+    }
+    return aliases.get(normalized, [normalized])
 
 
 async def run_market_structure_shadow(

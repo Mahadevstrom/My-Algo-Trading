@@ -114,7 +114,7 @@ class TestNiftyMomentumEngine(unittest.TestCase):
 
     def test_5_missing_banknifty_and_breadth_warns(self):
         result = self.engine_under_test.safe_evaluate({"nifty_candles": _candles([24000 + index for index in range(12)])})
-        self.assertTrue(any("BANKNIFTY" in warning for warning in result.warnings))
+        self.assertTrue(any("NIFTY Bank/BANKNIFTY" in warning for warning in result.warnings))
         self.assertTrue(any("breadth" in warning.lower() for warning in result.warnings))
 
     def test_6_evidence_contains_validation_fields(self):

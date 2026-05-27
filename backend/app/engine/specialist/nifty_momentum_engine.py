@@ -133,7 +133,7 @@ class NiftyMomentumValidationEngine(AbstractSpecialistEngine):
             warnings.append("Less than 21 NIFTY candles; momentum validation is early-session only")
         if not banknifty_candles:
             confidence -= 0.2
-            warnings.append("BANKNIFTY candles unavailable; cross-index validation missing")
+            warnings.append("NIFTY Bank/BANKNIFTY candles unavailable; cross-index validation missing")
         if not breadth:
             confidence -= 0.2
             warnings.append("NIFTY breadth/sector data unavailable; constituent confirmation missing")
@@ -183,7 +183,7 @@ async def build_nifty_momentum_data(db: Session, underlying: str = "NIFTY") -> d
     try:
         banknifty_data = await build_market_structure_data(db, "BANKNIFTY", "5min")
     except Exception as exc:
-        logger.warning("BANKNIFTY momentum data lookup failed (non-fatal): %s", exc)
+        logger.warning("NIFTY Bank/BANKNIFTY momentum data lookup failed (non-fatal): %s", exc)
         banknifty_data = {"candles": []}
     try:
         breadth = await get_sector_breadth_service().summary(db, "NIFTY")

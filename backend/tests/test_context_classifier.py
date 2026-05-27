@@ -214,7 +214,7 @@ class TestContextClassifier(unittest.TestCase):
         self.assertEqual(result.context_type, ContextType.NORMAL_TRADING_DAY)
         self.assertEqual(result.secondary_context, ContextType.BANKNIFTY_MOMENTUM_VALIDATION)
         self.assertEqual(result.confidence_modifier, 0.0)
-        self.assertIn("BANKNIFTY momentum is BULLISH", result.context_summary)
+        self.assertIn("NIFTY Bank/BANKNIFTY momentum is BULLISH", result.context_summary)
         self.assertIn("not as a trade trigger", result.context_summary)
 
 
