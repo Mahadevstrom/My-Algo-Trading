@@ -63,3 +63,6 @@ Thumbs.db
 
 # Local research PDFs/books/notes not needed for source build
 Informaction & pdf/
+
+**/*.bak_*
+**/*.bak_phase*
