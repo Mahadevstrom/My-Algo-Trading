@@ -21,6 +21,7 @@ from app.db.database import Base, get_db
 from app.engine.context.context_classifier import ContextClassifier
 from app.engine.context.context_evidence import ContextEvidence
 from app.engine.context.context_logger import log_context_classification
+from app.engine.context.context_types import ContextType
 from app.engine.context.event_calendar import add_event
 from app.engine.context.models import ContextClassificationLog
 from app.engine.context.routes import router as context_router
@@ -180,6 +181,41 @@ class TestContextClassifier(unittest.TestCase):
         self.assertIn("context_distribution", payload)
         self.assertIn("context_win_rates", payload)
         self.assertIn("insight", payload)
+
+    def test_13_cross_index_sensex_expiry_sets_secondary_context(self):
+        market_data = {
+            "_now_ist": datetime(2026, 5, 26, 10, 15, tzinfo=IST),
+            "vix": 14.0,
+            "cross_index_expiries": ["SENSEX"],
+        }
+
+        with patch("app.engine.context.context_classifier.is_expiry_today", return_value=False), patch(
+            "app.engine.context.context_classifier.is_monthly_expiry_today", return_value=False
+        ), patch("app.engine.context.context_classifier.days_to_next_expiry", return_value=5), patch(
+            "app.engine.context.context_classifier.is_event_day", return_value=(False, None)
+        ):
+            result = self.classifier.safe_classify(self.db, market_data=market_data, underlying="NIFTY")
+
+        self.assertEqual(result.context_type, ContextType.NORMAL_TRADING_DAY)
+        self.assertEqual(result.secondary_context, ContextType.SENSEX_EXPIRY_DAY)
+        self.assertGreaterEqual(result.confidence_modifier, 0.03)
+        self.assertIn("SENSEX expiry today", result.context_summary)
+
+    def test_14_banknifty_momentum_is_validation_only(self):
+        market_data = {
+            "_now_ist": datetime(2026, 5, 26, 10, 15, tzinfo=IST),
+            "vix": 14.0,
+            "banknifty_direction": "BULLISH",
+            "banknifty_change_pct": 0.42,
+        }
+        with self._no_expiry_patches()[0], self._no_expiry_patches()[1], self._no_expiry_patches()[2], self._no_expiry_patches()[3]:
+            result = self.classifier.safe_classify(self.db, market_data=market_data, underlying="NIFTY")
+
+        self.assertEqual(result.context_type, ContextType.NORMAL_TRADING_DAY)
+        self.assertEqual(result.secondary_context, ContextType.BANKNIFTY_MOMENTUM_VALIDATION)
+        self.assertEqual(result.confidence_modifier, 0.0)
+        self.assertIn("BANKNIFTY momentum is BULLISH", result.context_summary)
+        self.assertIn("not as a trade trigger", result.context_summary)
 
 
 if __name__ == "__main__":

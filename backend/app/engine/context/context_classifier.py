@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -17,6 +18,8 @@ from app.engine.context.expiry_calendar import (
     is_expiry_today,
     is_monthly_expiry_today,
 )
+from app.engine.dhan_instrument_importer import DhanInstrumentImporter
+from app.models.live_candle import LiveCandleRecord
 
 logger = logging.getLogger(__name__)
 IST = ZoneInfo("Asia/Kolkata")
@@ -44,6 +47,12 @@ class ContextClassifier:
             vix_vs_avg = round((vix_value - vix_20day_avg) / vix_20day_avg * 100, 2)
         data_quality = _normalize_data_quality(market_data.get("data_quality_status"))
         is_event, event_name = is_event_day(ist_date_str)
+        cross_context, cross_modifier, cross_summary = _cross_index_context(
+            db=db,
+            primary_underlying=underlying,
+            market_data=market_data,
+            today_ist=now_ist.date(),
+        )
 
         context_type = ContextType.NORMAL_TRADING_DAY
         secondary_context = None
@@ -95,7 +104,14 @@ class ContextClassifier:
                 confidence = 0.75
                 modifier = -0.05
 
+        if secondary_context is None and cross_context is not None:
+            secondary_context = cross_context
+        if context_type not in {ContextType.STALE_DATA_DAY, ContextType.EXPIRY_DAY_AFTERNOON}:
+            modifier = max(-0.20, min(0.20, modifier + cross_modifier))
+
         summary = _context_summary(context_type, opening_gap_pct, vix_value, vix_vs_avg, event_name)
+        if cross_summary:
+            summary = f"{summary} {cross_summary}"
         return ContextEvidence(
             context_type=context_type,
             context_confidence=round(confidence, 3),
@@ -252,6 +268,138 @@ def _context_summary(context_type: str, opening_gap_pct: float | None, vix_value
     if context_type == ContextType.UNKNOWN:
         return "Context could not be determined. Use conservative thresholds."
     return "Normal trading day. Standard thresholds apply."
+
+
+def _cross_index_context(
+    db: Session,
+    primary_underlying: str,
+    market_data: dict[str, Any],
+    today_ist,
+) -> tuple[str | None, float, str]:
+    primary = (primary_underlying or "NIFTY").strip().upper()
+    related = [item for item in _related_underlyings(primary) if item != primary]
+    expiry_hits = _cross_expiry_hits(db, related, market_data, today_ist)
+
+    secondary_context = None
+    modifier = 0.0
+    summaries = []
+    if expiry_hits:
+        secondary_context = _expiry_secondary_context(expiry_hits)
+        modifier += 0.05 if "BANKNIFTY" in expiry_hits else 0.03
+        summaries.append(
+            f"{', '.join(expiry_hits)} expiry today. Watch cross-index volatility and option-flow distortion."
+        )
+
+    banknifty_momentum = _banknifty_momentum(db, market_data)
+    if banknifty_momentum:
+        if secondary_context is None:
+            secondary_context = ContextType.BANKNIFTY_MOMENTUM_VALIDATION
+        summaries.append(banknifty_momentum)
+
+    return secondary_context, round(modifier, 3), " ".join(summaries)
+
+
+def _cross_expiry_hits(
+    db: Session,
+    related: list[str],
+    market_data: dict[str, Any],
+    today_ist,
+) -> list[str]:
+    explicit = market_data.get("cross_index_expiries")
+    if isinstance(explicit, str):
+        return [item.strip().upper() for item in explicit.split(",") if item.strip().upper() in related]
+    if isinstance(explicit, (list, tuple, set)):
+        return [str(item).strip().upper() for item in explicit if str(item).strip().upper() in related]
+
+    hits = []
+    importer = DhanInstrumentImporter()
+    for symbol in related:
+        try:
+            expiries = importer.expiries(db, symbol)
+        except Exception:
+            continue
+        if any(item == today_ist for item in expiries):
+            hits.append(symbol)
+    return hits
+
+
+def _related_underlyings(primary: str) -> list[str]:
+    if primary == "BANKNIFTY":
+        return ["NIFTY", "SENSEX", "BANKEX"]
+    if primary == "SENSEX":
+        return ["NIFTY", "BANKNIFTY", "BANKEX"]
+    return ["BANKNIFTY", "SENSEX", "BANKEX"]
+
+
+def _expiry_secondary_context(expiry_hits: list[str]) -> str:
+    if "BANKNIFTY" in expiry_hits:
+        return ContextType.BANKNIFTY_EXPIRY_DAY
+    if "SENSEX" in expiry_hits:
+        return ContextType.SENSEX_EXPIRY_DAY
+    return ContextType.CROSS_INDEX_EXPIRY_DAY
+
+
+def _banknifty_momentum(db: Session, market_data: dict[str, Any]) -> str:
+    direction = str(
+        market_data.get("banknifty_direction")
+        or market_data.get("banknifty_momentum")
+        or ""
+    ).upper()
+    change_pct = _num(
+        market_data.get("banknifty_change_pct")
+        or market_data.get("banknifty_opening_gap_pct")
+    )
+
+    if not direction or direction == "UNKNOWN":
+        db_momentum = _latest_index_momentum(db, "BANKNIFTY")
+        direction = db_momentum[0] if db_momentum else direction
+        change_pct = db_momentum[1] if db_momentum and change_pct is None else change_pct
+
+    if direction not in {"BULLISH", "BEARISH"}:
+        return ""
+
+    if change_pct is None:
+        return f"BANKNIFTY momentum is {direction}; use it only as cross-market validation, not as a trade trigger."
+    return (
+        f"BANKNIFTY momentum is {direction} ({change_pct:+.2f}%); "
+        "use it only as cross-market validation, not as a trade trigger."
+    )
+
+
+def _latest_index_momentum(db: Session, underlying: str) -> tuple[str, float | None] | None:
+    try:
+        symbol = underlying.strip().upper()
+        rows = list(
+            db.scalars(
+                select(LiveCandleRecord)
+                .where(
+                    LiveCandleRecord.timeframe.in_(["5m", "5min"]),
+                    LiveCandleRecord.close > 0,
+                    or_(
+                        LiveCandleRecord.symbol == symbol,
+                        LiveCandleRecord.underlying == symbol,
+                    ),
+                    LiveCandleRecord.option_type.is_(None),
+                )
+                .order_by(LiveCandleRecord.start_time.desc())
+                .limit(6)
+            )
+        )
+    except Exception:
+        return None
+    rows = list(reversed(rows))
+    if len(rows) < 2:
+        return None
+    first = rows[0].close
+    last = rows[-1].close
+    if not first:
+        return None
+    change_pct = round((last - first) / first * 100, 3)
+    if change_pct >= 0.25:
+        return "BULLISH", change_pct
+    if change_pct <= -0.25:
+        return "BEARISH", change_pct
+    return None
 
 
 def _normalize_data_quality(value: Any) -> str:
