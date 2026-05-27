@@ -117,7 +117,8 @@ def setup_performance(db: Session = Depends(get_db)) -> dict:
                 "worst_context": _worst_context(labelled),
             }
         )
-    most_matched = max(items, key=lambda item: item["matched_count"], default=None)
+    matched_items = [item for item in items if item["matched_count"] > 0]
+    most_matched = max(matched_items, key=lambda item: item["matched_count"], default=None)
     win_rate_items = [item for item in items if item["win_rate_pct"] is not None]
     highest_win_rate = max(win_rate_items, key=lambda item: item["win_rate_pct"], default=None)
     return {

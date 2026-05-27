@@ -112,7 +112,9 @@ class TestContextClassifier(unittest.TestCase):
         self.assertGreaterEqual(result.confidence_modifier, 0.20)
 
     def test_8_safe_classify_never_raises(self):
-        result = self.classifier.safe_classify(db=self.db, market_data=None)
+        market_data = {"_now_ist": datetime(2026, 5, 26, 10, 15, tzinfo=IST)}
+        with self._no_expiry_patches()[0], self._no_expiry_patches()[1], self._no_expiry_patches()[2], self._no_expiry_patches()[3]:
+            result = self.classifier.safe_classify(db=self.db, market_data=market_data)
         self.assertIsInstance(result, ContextEvidence)
         self.assertIn(result.context_type, ("UNKNOWN", "NORMAL_TRADING_DAY", "PRE_EXPIRY_DAY"))
 
