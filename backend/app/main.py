@@ -50,6 +50,7 @@ from app.api.routes_audit import router as audit_router
 from app.api.routes_backtest import router as backtest_router, walk_forward_router
 from app.api.routes_broker import router as broker_router
 from app.api.routes_data_quality import router as data_quality_router
+from app.api.routes_dhan_auth import router as dhan_auth_router
 from app.api.routes_feed_reliability import router as feed_reliability_router
 from app.api.routes_dhan_instruments import router as dhan_instruments_router
 from app.api.routes_health import router as health_router
@@ -81,6 +82,7 @@ from app.api.routes_strategies import router as strategies_router
 from app.api.routes_trade_journal import router as trade_journal_router
 from app.api.routes_ai_analyst import router as ai_analyst_router
 from app.engine.context.routes import router as context_router
+from app.engine.decision.routes import router as decision_router
 from app.engine.specialist.routes import router as specialist_router
 from app.engine.setup.routes import router as setup_router
 from app.config import settings
@@ -157,6 +159,7 @@ app.include_router(backtest_router)
 app.include_router(walk_forward_router)
 app.include_router(broker_router)
 app.include_router(data_quality_router)
+app.include_router(dhan_auth_router)
 app.include_router(feed_reliability_router)
 app.include_router(signals_router)
 app.include_router(signals_v2_router)
@@ -189,6 +192,7 @@ app.include_router(agent_evolution_router)
 app.include_router(specialist_router, prefix="/api/engine")
 app.include_router(context_router, prefix="/api/context")
 app.include_router(setup_router, prefix="/api/setup")
+app.include_router(decision_router, prefix="/api/decision-v2")
 
 
 @app.get("/")

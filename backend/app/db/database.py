@@ -65,6 +65,7 @@ def init_db() -> None:
     from app.models.trade import PaperTrade, PaperOptionCombo
     from app.agent_evolution.models import AgentEvolutionRecommendation
     from app.engine.context.models import ContextClassificationLog
+    from app.engine.decision.models import DecisionEngineV2Log
     from app.engine.specialist.models import LabelRecord, SpecialistEngineLog
     from app.engine.setup.models import SetupDefinition, SetupMatchLog
 

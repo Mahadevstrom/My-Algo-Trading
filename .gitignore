@@ -36,6 +36,7 @@ yarn-error.log*
 *.out.log
 *.err.log
 backend/logs/
+backend/runtime/
 
 # Local backups created during development
 *.bak

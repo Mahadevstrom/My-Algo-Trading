@@ -6,6 +6,11 @@ import httpx
 from app.config import Settings, settings
 from app.market.base import MarketDataProvider
 from app.market.schemas import clean_response, utc_timestamp
+from app.services.dhan_auth_service import (
+    dhan_auth_needs_reauth,
+    get_active_dhan_access_token,
+    has_active_dhan_credentials,
+)
 from app.services.dhan_rest_quota_service import get_dhan_rest_quota_service
 
 
@@ -17,14 +22,16 @@ class DhanDataAdapter(MarketDataProvider):
         self.timeout = httpx.Timeout(10.0)
 
     def has_credentials(self) -> bool:
-        return bool(self.settings.dhan_client_id and self.settings.dhan_access_token)
+        return has_active_dhan_credentials(self.settings)
 
     def status(self) -> dict[str, Any]:
         has_client_id = bool(self.settings.dhan_client_id)
-        has_access_token = bool(self.settings.dhan_access_token)
+        has_access_token = bool(get_active_dhan_access_token(self.settings))
 
         if not self.settings.dhan_data_enabled:
             message = "Dhan Data API is disabled. Set DHAN_DATA_ENABLED=true in backend/.env."
+        elif dhan_auth_needs_reauth(self.settings):
+            message = "Dhan API key auth is configured but access token needs re-approval. Open /api/dhan-auth/login."
         elif not self.has_credentials():
             message = "Dhan Data credentials missing. Add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in backend/.env."
         else:
@@ -213,7 +220,7 @@ class DhanDataAdapter(MarketDataProvider):
 
         url = f"{self.settings.dhan_base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
-            "access-token": self.settings.dhan_access_token or "",
+            "access-token": get_active_dhan_access_token(self.settings) or "",
             "client-id": self.settings.dhan_client_id or "",
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -314,6 +321,13 @@ class DhanDataAdapter(MarketDataProvider):
                 message="Dhan Data API is disabled. Set DHAN_DATA_ENABLED=true in backend/.env.",
             )
         if not self.has_credentials():
+            if dhan_auth_needs_reauth(self.settings):
+                return clean_response(
+                    ok=False,
+                    connected=False,
+                    status="NEEDS_REAUTH",
+                    message="Dhan access token expired or missing. Open /api/dhan-auth/login to approve a fresh token.",
+                )
             return clean_response(
                 ok=False,
                 connected=False,

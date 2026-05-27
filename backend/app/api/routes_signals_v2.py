@@ -79,6 +79,19 @@ def _log_setup_matcher_shadow(db: Session, signal_result) -> None:
         pass
 
 
+def _log_decision_engine_v2_shadow(db: Session, signal_result) -> None:
+    try:
+        from app.engine.decision.decision_engine_v2 import run_decision_engine_v2_shadow
+
+        run_decision_engine_v2_shadow(
+            db=db,
+            signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
+            signal_v2_decision=getattr(signal_result, "decision", None),
+        )
+    except Exception:
+        pass
+
+
 @router.get("/status")
 async def signal_v2_status() -> dict:
     return await get_signal_engine_v2().status()
@@ -95,6 +108,7 @@ async def generate_signal_v2(
     await _log_market_structure_shadow(db, request.underlying, result)
     await _log_nifty_momentum_shadow(db, request.underlying, result)
     _log_setup_matcher_shadow(db, result)
+    _log_decision_engine_v2_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 
@@ -106,6 +120,7 @@ async def analyze_nifty_v2(db: Session = Depends(get_db)) -> dict:
     await _log_market_structure_shadow(db, "NIFTY", result)
     await _log_nifty_momentum_shadow(db, "NIFTY", result)
     _log_setup_matcher_shadow(db, result)
+    _log_decision_engine_v2_shadow(db, result)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 

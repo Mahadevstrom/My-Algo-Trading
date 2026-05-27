@@ -179,6 +179,7 @@ class LivePaperSimulatorService:
         shadow_context_classifier = None
         shadow_market_structure_engine = None
         shadow_nifty_momentum_engine = None
+        shadow_decision_engine_v2 = None
         try:
             from app.engine.specialist.option_chain_engine import run_option_chain_shadow
 
@@ -260,6 +261,38 @@ class LivePaperSimulatorService:
             import logging as _logging4
 
             _logging4.getLogger(__name__).warning(f"NIFTY momentum shadow logging failed (non-fatal): {_mom_e}")
+        try:
+            from app.engine.setup.setup_shadow_runner import run_setup_matcher_shadow
+
+            run_setup_matcher_shadow(
+                db=db,
+                signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
+                signal_v2_decision=getattr(signal, "decision", None),
+            )
+        except Exception as _setup_e:
+            import logging as _logging5
+
+            _logging5.getLogger(__name__).warning(f"Setup matcher shadow logging failed (non-fatal): {_setup_e}")
+        try:
+            from app.engine.decision.decision_engine_v2 import run_decision_engine_v2_shadow
+
+            decision_record = run_decision_engine_v2_shadow(
+                db=db,
+                signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
+                signal_v2_decision=getattr(signal, "decision", None),
+            )
+            if decision_record is not None:
+                shadow_decision_engine_v2 = {
+                    "evaluation_id": decision_record.evaluation_id,
+                    "decision": decision_record.decision,
+                    "confidence": decision_record.confidence,
+                    "agrees_with_signal_v2": decision_record.agrees_with_signal_v2,
+                    "advisory_mode": decision_record.advisory_mode,
+                }
+        except Exception as _de_e:
+            import logging as _logging6
+
+            _logging6.getLogger(__name__).warning(f"Decision Engine v2 shadow logging failed (non-fatal): {_de_e}")
         candidate_tracking = await self._ensure_selected_option_tracked(db, signal)
         decision = self._entry_decision(db, signal, payload)
         AuditLogger().log(
@@ -276,6 +309,7 @@ class LivePaperSimulatorService:
                 "shadow_context_classifier": shadow_context_classifier,
                 "shadow_market_structure_engine": shadow_market_structure_engine,
                 "shadow_nifty_momentum_engine": shadow_nifty_momentum_engine,
+                "shadow_decision_engine_v2": shadow_decision_engine_v2,
             },
         )
         if not decision["entry_allowed"]:

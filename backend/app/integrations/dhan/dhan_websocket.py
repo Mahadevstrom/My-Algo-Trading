@@ -9,6 +9,7 @@ import websockets
 
 from app.config import Settings, settings
 from app.schemas.live_feed import NormalizedTick
+from app.services.dhan_auth_service import get_active_dhan_access_token, has_active_dhan_credentials
 
 
 DHAN_WS_URL = "wss://api-feed.dhan.co"
@@ -46,10 +47,10 @@ class DhanWebSocketClient:
         self._on_event = None
 
     def has_credentials(self) -> bool:
-        return bool(self.settings.dhan_client_id and self.settings.dhan_access_token)
+        return has_active_dhan_credentials(self.settings)
 
     def connection_url(self) -> str:
-        token = quote(self.settings.dhan_access_token or "", safe="")
+        token = quote(get_active_dhan_access_token(self.settings) or "", safe="")
         client_id = quote(self.settings.dhan_client_id or "", safe="")
         return f"{DHAN_WS_URL}?version=2&token={token}&clientId={client_id}&authType=2"
 

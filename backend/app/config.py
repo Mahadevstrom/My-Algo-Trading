@@ -70,6 +70,24 @@ class Settings(BaseModel):
     dhan_access_token: str | None = Field(
         default_factory=lambda: _env_optional_str("DHAN_ACCESS_TOKEN")
     )
+    enable_dhan_api_key_auth: bool = Field(default_factory=lambda: _env_bool("ENABLE_DHAN_API_KEY_AUTH", False))
+    dhan_api_key: str | None = Field(default_factory=lambda: _env_optional_str("DHAN_API_KEY"))
+    dhan_api_secret: str | None = Field(default_factory=lambda: _env_optional_str("DHAN_API_SECRET"))
+    dhan_redirect_url: str = Field(
+        default_factory=lambda: os.getenv(
+            "DHAN_REDIRECT_URL",
+            "http://127.0.0.1:8018/api/dhan-auth/callback",
+        )
+    )
+    dhan_auth_base_url: str = Field(
+        default_factory=lambda: os.getenv("DHAN_AUTH_BASE_URL", "https://auth.dhan.co")
+    )
+    dhan_token_cache_path: str = Field(
+        default_factory=lambda: os.getenv(
+            "DHAN_TOKEN_CACHE_PATH",
+            str(BACKEND_DIR / "runtime" / "dhan_access_token.json"),
+        )
+    )
     dhan_trading_base_url: str = Field(
         default_factory=lambda: os.getenv("DHAN_TRADING_BASE_URL", "https://api.dhan.co/v2")
     )
@@ -173,6 +191,16 @@ class Settings(BaseModel):
         default_factory=lambda: _env_int("SETUP_MATCHER_MIN_HISTORICAL_TRADES", 5)
     )
     setup_seeder_on_startup: bool = Field(default_factory=lambda: _env_bool("SETUP_SEEDER_ON_STARTUP", True))
+    enable_decision_engine_v2: bool = Field(default_factory=lambda: _env_bool("ENABLE_DECISION_ENGINE_V2", True))
+    decision_engine_v2_mode: str = Field(
+        default_factory=lambda: os.getenv("DECISION_ENGINE_V2_MODE", "SHADOW").strip().upper()
+    )
+    decision_engine_v2_evidence_window_seconds: int = Field(
+        default_factory=lambda: _env_int("DECISION_ENGINE_V2_EVIDENCE_WINDOW_SECONDS", 120)
+    )
+    decision_engine_v2_min_confidence: float = Field(
+        default_factory=lambda: _env_float("DECISION_ENGINE_V2_MIN_CONFIDENCE", 0.62)
+    )
     enable_test_tick_ingest: bool = Field(default_factory=lambda: _env_bool("ENABLE_TEST_TICK_INGEST", False))
     enable_data_quality_engine: bool = Field(default_factory=lambda: _env_bool("ENABLE_DATA_QUALITY_ENGINE", True))
     data_quality_rest_cross_check: bool = Field(default_factory=lambda: _env_bool("DATA_QUALITY_REST_CROSS_CHECK", True))
@@ -592,7 +620,12 @@ class Settings(BaseModel):
 
     @property
     def has_dhan_credentials(self) -> bool:
-        return bool(self.dhan_client_id and self.dhan_access_token)
+        try:
+            from app.services.dhan_auth_service import has_active_dhan_credentials
+
+            return has_active_dhan_credentials(self)
+        except Exception:
+            return bool(self.dhan_client_id and self.dhan_access_token)
 
     @property
     def has_indstocks_credentials(self) -> bool:

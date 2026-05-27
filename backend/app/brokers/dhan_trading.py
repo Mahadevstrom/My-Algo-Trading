@@ -4,6 +4,7 @@ import httpx
 
 from app.brokers.base import ReadOnlyBrokerClient
 from app.config import Settings, settings
+from app.services.dhan_auth_service import get_active_dhan_access_token, has_active_dhan_credentials
 
 
 class DhanTradingClient(ReadOnlyBrokerClient):
@@ -14,7 +15,7 @@ class DhanTradingClient(ReadOnlyBrokerClient):
         self.timeout = httpx.Timeout(10.0)
 
     def status(self) -> dict[str, Any]:
-        connected = self.settings.has_dhan_credentials
+        connected = has_active_dhan_credentials(self.settings)
 
         import os
         import time
@@ -53,7 +54,7 @@ class DhanTradingClient(ReadOnlyBrokerClient):
         }
 
     async def _get(self, endpoint: str) -> dict[str, Any]:
-        if not self.settings.has_dhan_credentials:
+        if not has_active_dhan_credentials(self.settings):
             return {
                 "ok": False,
                 "connected": False,
@@ -65,7 +66,7 @@ class DhanTradingClient(ReadOnlyBrokerClient):
         url = f"{self.settings.dhan_trading_base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         headers = {
             "client-id": self.settings.dhan_client_id or "",
-            "access-token": self.settings.dhan_access_token or "",
+            "access-token": get_active_dhan_access_token(self.settings) or "",
             "Accept": "application/json",
         }
 
