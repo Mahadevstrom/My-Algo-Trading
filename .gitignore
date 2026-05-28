@@ -61,6 +61,9 @@ RoadMape.txt
 .DS_Store
 Thumbs.db
 
+# Local UI verification screenshots
+frontend-v2/*.png
+
 # Local research PDFs/books/notes not needed for source build
 Informaction & pdf/
 
