@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -9,7 +11,7 @@ from app.schemas.signal_v2 import SignalV2GenerateRequest
 router = APIRouter(prefix="/api/signals-v2", tags=["signals-v2"])
 
 
-async def _log_option_chain_shadow(db: Session, underlying: str, signal_result) -> None:
+async def _log_option_chain_shadow(db: Session, underlying: str, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.specialist.option_chain_engine import run_option_chain_shadow
 
@@ -18,12 +20,13 @@ async def _log_option_chain_shadow(db: Session, underlying: str, signal_result) 
             underlying=underlying,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
 
 
-def _log_context_shadow(db: Session, underlying: str, signal_result) -> None:
+def _log_context_shadow(db: Session, underlying: str, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.context.context_classifier import run_context_shadow
 
@@ -33,12 +36,13 @@ def _log_context_shadow(db: Session, underlying: str, signal_result) -> None:
             signal_result=signal_result,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
 
 
-async def _log_market_structure_shadow(db: Session, underlying: str, signal_result) -> None:
+async def _log_market_structure_shadow(db: Session, underlying: str, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.specialist.market_structure_engine import run_market_structure_shadow
 
@@ -47,12 +51,13 @@ async def _log_market_structure_shadow(db: Session, underlying: str, signal_resu
             underlying=underlying,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
 
 
-async def _log_nifty_momentum_shadow(db: Session, underlying: str, signal_result) -> None:
+async def _log_nifty_momentum_shadow(db: Session, underlying: str, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.specialist.nifty_momentum_engine import run_nifty_momentum_shadow
 
@@ -61,12 +66,13 @@ async def _log_nifty_momentum_shadow(db: Session, underlying: str, signal_result
             underlying=underlying,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
 
 
-def _log_setup_matcher_shadow(db: Session, signal_result) -> None:
+def _log_setup_matcher_shadow(db: Session, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.setup.setup_shadow_runner import run_setup_matcher_shadow
 
@@ -74,12 +80,13 @@ def _log_setup_matcher_shadow(db: Session, signal_result) -> None:
             db=db,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
 
 
-def _log_decision_engine_v2_shadow(db: Session, signal_result) -> None:
+def _log_decision_engine_v2_shadow(db: Session, signal_result, evaluation_id: str) -> None:
     try:
         from app.engine.decision.decision_engine_v2 import run_decision_engine_v2_shadow
 
@@ -87,6 +94,7 @@ def _log_decision_engine_v2_shadow(db: Session, signal_result) -> None:
             db=db,
             signal_id=str(getattr(signal_result, "id", "")) if getattr(signal_result, "id", None) is not None else None,
             signal_v2_decision=getattr(signal_result, "decision", None),
+            evaluation_id=evaluation_id,
         )
     except Exception:
         pass
@@ -103,24 +111,26 @@ async def generate_signal_v2(
     db: Session = Depends(get_db),
 ) -> dict:
     result = await get_signal_engine_v2().generate(db, request)
-    await _log_option_chain_shadow(db, request.underlying, result)
-    _log_context_shadow(db, request.underlying, result)
-    await _log_market_structure_shadow(db, request.underlying, result)
-    await _log_nifty_momentum_shadow(db, request.underlying, result)
-    _log_setup_matcher_shadow(db, result)
-    _log_decision_engine_v2_shadow(db, result)
+    shadow_evaluation_id = str(uuid.uuid4())
+    await _log_option_chain_shadow(db, request.underlying, result, shadow_evaluation_id)
+    _log_context_shadow(db, request.underlying, result, shadow_evaluation_id)
+    await _log_market_structure_shadow(db, request.underlying, result, shadow_evaluation_id)
+    await _log_nifty_momentum_shadow(db, request.underlying, result, shadow_evaluation_id)
+    _log_setup_matcher_shadow(db, result, shadow_evaluation_id)
+    _log_decision_engine_v2_shadow(db, result, shadow_evaluation_id)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 
 @router.post("/analyze-nifty")
 async def analyze_nifty_v2(db: Session = Depends(get_db)) -> dict:
     result = await get_signal_engine_v2().analyze_nifty(db)
-    await _log_option_chain_shadow(db, "NIFTY", result)
-    _log_context_shadow(db, "NIFTY", result)
-    await _log_market_structure_shadow(db, "NIFTY", result)
-    await _log_nifty_momentum_shadow(db, "NIFTY", result)
-    _log_setup_matcher_shadow(db, result)
-    _log_decision_engine_v2_shadow(db, result)
+    shadow_evaluation_id = str(uuid.uuid4())
+    await _log_option_chain_shadow(db, "NIFTY", result, shadow_evaluation_id)
+    _log_context_shadow(db, "NIFTY", result, shadow_evaluation_id)
+    await _log_market_structure_shadow(db, "NIFTY", result, shadow_evaluation_id)
+    await _log_nifty_momentum_shadow(db, "NIFTY", result, shadow_evaluation_id)
+    _log_setup_matcher_shadow(db, result, shadow_evaluation_id)
+    _log_decision_engine_v2_shadow(db, result, shadow_evaluation_id)
     return {"ok": True, "signal": result.model_dump(mode="json")}
 
 

@@ -2,7 +2,7 @@ import json
 import os
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -17,7 +17,7 @@ if backend_dir not in sys.path:
 from app.config import settings
 from app.db.database import Base, get_db
 from app.engine.context.models import ContextClassificationLog
-from app.engine.decision.decision_engine_v2 import DecisionEngineV2
+from app.engine.decision.decision_engine_v2 import DecisionEngineV2, latest_decision_inputs
 from app.engine.decision.decision_evidence import DecisionEngineV2Evidence
 from app.engine.decision.decision_logger import log_decision_engine_v2, update_decision_engine_outcome
 from app.engine.decision.models import DecisionEngineV2Log
@@ -211,6 +211,43 @@ class TestDecisionEngineV2(unittest.TestCase):
         self.assertEqual(data["labelled_count"], 0)
         self.assertIn("insight", data)
 
+    def test_9_evaluation_id_keeps_decision_inputs_together(self):
+        self._seed_latest(
+            evaluation_id="eval-pe",
+            oc_direction="BEARISH",
+            ms_direction="BEARISH",
+            momentum_direction="BEARISH",
+            setup_direction="PE",
+            setup_confidence=0.72,
+            signal_v2_decision="PE",
+        )
+        self._seed_latest(
+            evaluation_id="eval-ce",
+            oc_direction="BULLISH",
+            ms_direction="BULLISH",
+            momentum_direction="BULLISH",
+            setup_name="CE_BREAKOUT_CONTINUATION",
+            setup_direction="CE",
+            setup_confidence=0.72,
+            signal_v2_decision="CE",
+            created_at=datetime.utcnow() + timedelta(seconds=5),
+        )
+
+        inputs = latest_decision_inputs(self.db, evaluation_id="eval-pe")
+        decision = DecisionEngineV2().safe_decide(
+            self.db,
+            signal_v2_decision="PE",
+            evaluation_id="eval-pe",
+        )
+
+        self.assertIsNotNone(inputs)
+        self.assertEqual(inputs[0].evaluation_id, "eval-pe")
+        self.assertEqual(inputs[1].evaluation_id, "eval-pe")
+        self.assertEqual(inputs[2].evaluation_id, "eval-pe")
+        self.assertEqual(inputs[3].evaluation_id, "eval-pe")
+        self.assertEqual(inputs[4].evaluation_id, "eval-pe")
+        self.assertEqual(decision.decision, "PE")
+
     def _seed_latest(
         self,
         oc_direction: str = "BEARISH",
@@ -223,12 +260,15 @@ class TestDecisionEngineV2(unittest.TestCase):
         setup_matched: bool = True,
         setup_confidence: float = 0.72,
         signal_v2_decision: str = "PE",
+        evaluation_id: str = "eval-shared",
+        created_at: datetime | None = None,
     ) -> None:
-        now = datetime.utcnow()
+        now = created_at or datetime.utcnow()
         self.db.add_all(
             [
                 SpecialistEngineLog(
-                    evaluation_id="oc-eval",
+                    evaluation_id=evaluation_id,
+                    created_at=now,
                     engine_name="option_chain_engine",
                     score=74.0,
                     direction=oc_direction,
@@ -241,7 +281,8 @@ class TestDecisionEngineV2(unittest.TestCase):
                     signal_engine_v2_decision=signal_v2_decision,
                 ),
                 SpecialistEngineLog(
-                    evaluation_id="ms-eval",
+                    evaluation_id=evaluation_id,
+                    created_at=now,
                     engine_name="market_structure_engine",
                     score=68.0,
                     direction=ms_direction,
@@ -254,7 +295,8 @@ class TestDecisionEngineV2(unittest.TestCase):
                     signal_engine_v2_decision=signal_v2_decision,
                 ),
                 SpecialistEngineLog(
-                    evaluation_id="mom-eval",
+                    evaluation_id=evaluation_id,
+                    created_at=now,
                     engine_name="nifty_momentum_engine",
                     score=65.0,
                     direction=momentum_direction,
@@ -267,7 +309,8 @@ class TestDecisionEngineV2(unittest.TestCase):
                     signal_engine_v2_decision=signal_v2_decision,
                 ),
                 ContextClassificationLog(
-                    evaluation_id="ctx-eval",
+                    evaluation_id=evaluation_id,
+                    created_at=now,
                     context_type=context_type,
                     context_confidence=0.8,
                     data_quality_status="STALE" if context_type == "STALE_DATA_DAY" else "CLEAN",
@@ -275,7 +318,8 @@ class TestDecisionEngineV2(unittest.TestCase):
                     signal_v2_decision=signal_v2_decision,
                 ),
                 SetupMatchLog(
-                    evaluation_id="setup-eval",
+                    evaluation_id=evaluation_id,
+                    created_at=now,
                     setup_name=setup_name,
                     matched=setup_matched,
                     match_confidence=setup_confidence,

@@ -202,7 +202,7 @@ def shadow_comparison_multi_engine(
     )
     grouped: dict[str, list[SpecialistEngineLog]] = {}
     for record in records:
-        key = record.evaluation_id or record.signal_id or str(record.id)
+        key = record.signal_id or record.evaluation_id or str(record.id)
         grouped.setdefault(key, []).append(record)
 
     items = []

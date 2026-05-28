@@ -228,6 +228,59 @@ class TestMarketStructureEngine(unittest.TestCase):
         self.assertGreaterEqual(data["candle_count"], 10)
         self.assertEqual(data["candles"][-1]["close"], 54016.0)
 
+    def test_14_multi_engine_endpoint_groups_by_signal_id(self):
+        now = datetime.utcnow()
+        self.db.add_all(
+            [
+                SpecialistEngineLog(
+                    evaluation_id="eval-oc",
+                    signal_id="signal-shared",
+                    engine_name="option_chain_engine",
+                    score=70.0,
+                    direction="BEARISH",
+                    verdict="PE_STRONG",
+                    confidence=0.8,
+                    blocking=False,
+                    evidence_json="{}",
+                    warnings_json="[]",
+                    evaluated_at=now,
+                ),
+                SpecialistEngineLog(
+                    evaluation_id="eval-ms",
+                    signal_id="signal-shared",
+                    engine_name="market_structure_engine",
+                    score=68.0,
+                    direction="BEARISH",
+                    verdict="BEARISH_TREND",
+                    confidence=0.8,
+                    blocking=False,
+                    evidence_json="{}",
+                    warnings_json="[]",
+                    evaluated_at=now,
+                ),
+            ]
+        )
+        self.db.commit()
+        app = FastAPI()
+        app.include_router(specialist_router, prefix="/api/engine")
+
+        def override_db():
+            try:
+                yield self.db
+            finally:
+                pass
+
+        app.dependency_overrides[get_db] = override_db
+        client = TestClient(app)
+
+        response = client.get("/api/engine/shadow-comparison/multi-engine")
+
+        self.assertEqual(response.status_code, 200)
+        groups = response.json()
+        shared = next(item for item in groups if item["evaluation_id"] == "signal-shared")
+        self.assertIn("option_chain_engine", shared["engines"])
+        self.assertIn("market_structure_engine", shared["engines"])
+
 
 if __name__ == "__main__":
     unittest.main()

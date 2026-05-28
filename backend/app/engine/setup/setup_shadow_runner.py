@@ -18,11 +18,12 @@ def run_setup_matcher_shadow(
     db: Session,
     signal_id: str = None,
     signal_v2_decision: str = None,
+    evaluation_id: str | None = None,
 ) -> None:
     if not settings.enable_setup_matcher:
         return
     try:
-        evidence = _latest_evidence(db)
+        evidence = _latest_evidence(db, evaluation_id=evaluation_id)
         if evidence is None:
             return
         oc_ev, ms_ev, ctx_ev, momentum_ev = evidence
@@ -34,14 +35,17 @@ def run_setup_matcher_shadow(
             momentum_evidence=momentum_ev,
             signal_id=signal_id,
             signal_v2_decision=signal_v2_decision,
-            evaluation_id=str(uuid.uuid4()),
+            evaluation_id=evaluation_id or str(uuid.uuid4()),
         )
         log_setup_match(db, match, signal_id=signal_id, signal_v2_decision=signal_v2_decision)
     except Exception as exc:
         logging.getLogger(__name__).warning("Setup matcher shadow failed (non-fatal): %s", exc)
 
 
-def _latest_evidence(db: Session):
+def _latest_evidence(db: Session, evaluation_id: str | None = None):
+    if evaluation_id:
+        return _evidence_by_evaluation_id(db, evaluation_id)
+
     cutoff = datetime.utcnow() - timedelta(seconds=settings.setup_matcher_evidence_window_seconds)
     oc_log = (
         db.query(SpecialistEngineLog)
@@ -71,6 +75,34 @@ def _latest_evidence(db: Session):
         return None
     momentum_evidence = _engine_evidence(momentum_log) if momentum_log else None
     return _engine_evidence(oc_log), _engine_evidence(ms_log), _context_evidence(ctx_log), momentum_evidence
+
+
+def _evidence_by_evaluation_id(db: Session, evaluation_id: str):
+    oc_log = _engine_log_by_evaluation_id(db, evaluation_id, "option_chain_engine")
+    ms_log = _engine_log_by_evaluation_id(db, evaluation_id, "market_structure_engine")
+    momentum_log = _engine_log_by_evaluation_id(db, evaluation_id, "nifty_momentum_engine")
+    ctx_log = (
+        db.query(ContextClassificationLog)
+        .filter(ContextClassificationLog.evaluation_id == evaluation_id)
+        .order_by(ContextClassificationLog.created_at.desc())
+        .first()
+    )
+    if not (oc_log and ms_log and ctx_log):
+        return None
+    momentum_evidence = _engine_evidence(momentum_log) if momentum_log else None
+    return _engine_evidence(oc_log), _engine_evidence(ms_log), _context_evidence(ctx_log), momentum_evidence
+
+
+def _engine_log_by_evaluation_id(db: Session, evaluation_id: str, engine_name: str):
+    return (
+        db.query(SpecialistEngineLog)
+        .filter(
+            SpecialistEngineLog.evaluation_id == evaluation_id,
+            SpecialistEngineLog.engine_name == engine_name,
+        )
+        .order_by(SpecialistEngineLog.created_at.desc())
+        .first()
+    )
 
 
 def _engine_evidence(row: SpecialistEngineLog) -> EngineEvidence:

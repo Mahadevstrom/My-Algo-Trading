@@ -13,13 +13,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
 from app.engine.context.context_evidence import ContextEvidence
+from app.engine.context.models import ContextClassificationLog
 from app.engine.setup.models import SetupDefinition, SetupMatchLog
+from app.engine.setup.routes import _latest_evidence
 from app.engine.setup.setup_seeder import seed_core_setups
 from app.engine.setup.setup_matcher import SetupMatcher
 from app.engine.setup.setup_types import SetupName
 from app.engine.setup.setup_logger import log_setup_match
 from app.engine.setup.condition_evaluator import evaluate_condition
 from app.engine.specialist.base import EngineEvidence
+from app.engine.specialist.models import SpecialistEngineLog
 
 
 class TestSetupMatcher(unittest.TestCase):
@@ -761,6 +764,68 @@ class TestSetupMatcher(unittest.TestCase):
         res = evaluate_condition(cond_missing, oc_dict, ms_dict, ctx_dict)
         self.assertFalse(res.passed)
         self.assertEqual(res.actual_value, "FIELD_NOT_FOUND")
+
+    def test_15_current_setup_evidence_includes_optional_momentum(self):
+        now = datetime.utcnow()
+        self.db.add_all(
+            [
+                SpecialistEngineLog(
+                    evaluation_id="eval-current",
+                    created_at=now,
+                    engine_name="option_chain_engine",
+                    score=74.0,
+                    direction="BEARISH",
+                    verdict="PE_STRONG",
+                    confidence=0.8,
+                    blocking=False,
+                    evidence_json="{}",
+                    warnings_json="[]",
+                    evaluated_at=now,
+                ),
+                SpecialistEngineLog(
+                    evaluation_id="eval-current",
+                    created_at=now,
+                    engine_name="market_structure_engine",
+                    score=68.0,
+                    direction="BEARISH",
+                    verdict="BEARISH_TREND",
+                    confidence=0.8,
+                    blocking=False,
+                    evidence_json="{}",
+                    warnings_json="[]",
+                    evaluated_at=now,
+                ),
+                SpecialistEngineLog(
+                    evaluation_id="eval-current",
+                    created_at=now,
+                    engine_name="nifty_momentum_engine",
+                    score=50.0,
+                    direction="NEUTRAL",
+                    verdict="REVERSAL_RISK",
+                    confidence=0.6,
+                    blocking=False,
+                    evidence_json="{}",
+                    warnings_json="[]",
+                    evaluated_at=now,
+                ),
+                ContextClassificationLog(
+                    evaluation_id="eval-current",
+                    created_at=now,
+                    context_type="NORMAL_TRADING_DAY",
+                    context_confidence=0.8,
+                    data_quality_status="CLEAN",
+                    confidence_modifier=0.0,
+                ),
+            ]
+        )
+        self.db.commit()
+
+        evidence = _latest_evidence(self.db, window_seconds=300)
+
+        self.assertIsNotNone(evidence)
+        self.assertEqual(len(evidence), 4)
+        self.assertIsNotNone(evidence[3])
+        self.assertEqual(evidence[3].verdict, "REVERSAL_RISK")
 
 
 if __name__ == "__main__":

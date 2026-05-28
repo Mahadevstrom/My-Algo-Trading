@@ -186,11 +186,12 @@ def run_context_shadow(
     signal_result: Any = None,
     signal_id: str | None = None,
     signal_v2_decision: str | None = None,
+    evaluation_id: str | None = None,
 ):
     try:
         market_data = signal_context_market_data(signal_result) if signal_result is not None else {}
         context = ContextClassifier().safe_classify(db=db, market_data=market_data, underlying=underlying)
-        context.evaluation_id = str(uuid.uuid4())
+        context.evaluation_id = evaluation_id or str(uuid.uuid4())
         return log_context_classification(
             db=db,
             context=context,

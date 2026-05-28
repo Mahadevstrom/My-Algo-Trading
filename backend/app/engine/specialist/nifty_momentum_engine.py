@@ -208,13 +208,14 @@ async def run_nifty_momentum_shadow(
     underlying: str = "NIFTY",
     signal_id: str | None = None,
     signal_v2_decision: str | None = None,
+    evaluation_id: str | None = None,
 ):
     if not settings.enable_nifty_momentum_engine:
         return None
     try:
         market_data = await build_nifty_momentum_data(db, underlying)
         evidence = NiftyMomentumValidationEngine().safe_evaluate(market_data)
-        evidence.evaluation_id = str(uuid.uuid4())
+        evidence.evaluation_id = evaluation_id or str(uuid.uuid4())
         return log_engine_evidence(
             db=db,
             evidence=evidence,

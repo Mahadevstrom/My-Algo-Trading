@@ -254,11 +254,12 @@ async def run_option_chain_shadow(
     underlying: str = "NIFTY",
     signal_id: str | None = None,
     signal_v2_decision: str | None = None,
+    evaluation_id: str | None = None,
 ):
     try:
         market_data = await build_option_chain_market_data(db, underlying)
         evidence = OptionChainEngine().safe_evaluate(market_data)
-        evidence.evaluation_id = str(uuid.uuid4())
+        evidence.evaluation_id = evaluation_id or str(uuid.uuid4())
         return log_engine_evidence(
             db=db,
             evidence=evidence,

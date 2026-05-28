@@ -28,7 +28,7 @@ class DecisionEngineV2:
         signal_v2_decision: str = None,
         evaluation_id: str = None,
     ) -> DecisionEngineV2Evidence:
-        evidence = latest_decision_inputs(db)
+        evidence = latest_decision_inputs(db, evaluation_id=evaluation_id)
         if evidence is None:
             return self._insufficient(signal_v2_decision, evaluation_id)
 
@@ -213,7 +213,14 @@ class DecisionEngineV2:
         )
 
 
-def latest_decision_inputs(db: Session, window_seconds: int | None = None):
+def latest_decision_inputs(
+    db: Session,
+    window_seconds: int | None = None,
+    evaluation_id: str | None = None,
+):
+    if evaluation_id:
+        return _decision_inputs_by_evaluation_id(db, evaluation_id)
+
     seconds = window_seconds or settings.decision_engine_v2_evidence_window_seconds
     cutoff = datetime.utcnow() - timedelta(seconds=seconds)
 
@@ -245,10 +252,43 @@ def latest_decision_inputs(db: Session, window_seconds: int | None = None):
     return oc_log, ms_log, momentum_log, ctx_log, setup_log
 
 
+def _decision_inputs_by_evaluation_id(db: Session, evaluation_id: str):
+    def engine_log(name: str):
+        return (
+            db.query(SpecialistEngineLog)
+            .filter(
+                SpecialistEngineLog.evaluation_id == evaluation_id,
+                SpecialistEngineLog.engine_name == name,
+            )
+            .order_by(SpecialistEngineLog.created_at.desc())
+            .first()
+        )
+
+    oc_log = engine_log("option_chain_engine")
+    ms_log = engine_log("market_structure_engine")
+    momentum_log = engine_log("nifty_momentum_engine")
+    ctx_log = (
+        db.query(ContextClassificationLog)
+        .filter(ContextClassificationLog.evaluation_id == evaluation_id)
+        .order_by(ContextClassificationLog.created_at.desc())
+        .first()
+    )
+    setup_log = (
+        db.query(SetupMatchLog)
+        .filter(SetupMatchLog.evaluation_id == evaluation_id)
+        .order_by(SetupMatchLog.created_at.desc())
+        .first()
+    )
+    if not (oc_log and ms_log and momentum_log and ctx_log and setup_log):
+        return None
+    return oc_log, ms_log, momentum_log, ctx_log, setup_log
+
+
 def run_decision_engine_v2_shadow(
     db: Session,
     signal_id: str = None,
     signal_v2_decision: str = None,
+    evaluation_id: str | None = None,
 ) -> Any:
     if not settings.enable_decision_engine_v2:
         return None
@@ -257,7 +297,7 @@ def run_decision_engine_v2_shadow(
             db=db,
             signal_id=signal_id,
             signal_v2_decision=signal_v2_decision,
-            evaluation_id=str(uuid.uuid4()),
+            evaluation_id=evaluation_id or str(uuid.uuid4()),
         )
         return log_decision_engine_v2(db, decision, signal_id=signal_id, signal_v2_decision=signal_v2_decision)
     except Exception as exc:

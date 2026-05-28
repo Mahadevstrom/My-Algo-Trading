@@ -266,11 +266,16 @@ class DhanDataAdapter(MarketDataProvider):
             )
 
         if response.status_code in {401, 403}:
+            message = (
+                "Dhan token expired or unauthorized. Open /api/dhan-auth/login to approve a fresh token."
+                if self.settings.enable_dhan_api_key_auth
+                else "Dhan token expired or unauthorized. Update backend/.env with a fresh access token."
+            )
             result = clean_response(
                 ok=False,
                 connected=False,
                 status="UNAUTHORIZED",
-                message="Dhan token expired or unauthorized. Update backend/.env with a fresh access token.",
+                message=message,
                 http_status=response.status_code,
                 quota_status=quota.status(),
             )
