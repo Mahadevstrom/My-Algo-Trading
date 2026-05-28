@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from collections import Counter, deque
 from datetime import datetime, time, timezone
 from typing import Any
@@ -180,6 +181,7 @@ class LivePaperSimulatorService:
         shadow_market_structure_engine = None
         shadow_nifty_momentum_engine = None
         shadow_decision_engine_v2 = None
+        shadow_evaluation_id = str(uuid.uuid4())
         try:
             from app.engine.specialist.option_chain_engine import run_option_chain_shadow
 
@@ -188,6 +190,7 @@ class LivePaperSimulatorService:
                 underlying=payload.underlying,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
             if shadow_record is not None:
                 shadow_option_chain_engine = {
@@ -209,6 +212,7 @@ class LivePaperSimulatorService:
                 signal_result=signal,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
             if context_record is not None:
                 shadow_context_classifier = {
@@ -229,6 +233,7 @@ class LivePaperSimulatorService:
                 underlying=payload.underlying,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
             if ms_record is not None:
                 shadow_market_structure_engine = {
@@ -249,6 +254,7 @@ class LivePaperSimulatorService:
                 underlying=payload.underlying,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
             if momentum_record is not None:
                 shadow_nifty_momentum_engine = {
@@ -268,6 +274,7 @@ class LivePaperSimulatorService:
                 db=db,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
         except Exception as _setup_e:
             import logging as _logging5
@@ -280,6 +287,7 @@ class LivePaperSimulatorService:
                 db=db,
                 signal_id=str(getattr(signal, "id", "")) if getattr(signal, "id", None) is not None else None,
                 signal_v2_decision=getattr(signal, "decision", None),
+                evaluation_id=shadow_evaluation_id,
             )
             if decision_record is not None:
                 shadow_decision_engine_v2 = {
@@ -305,6 +313,7 @@ class LivePaperSimulatorService:
                 "entry_allowed": decision["entry_allowed"],
                 "reason": decision.get("rejection_reason"),
                 "candidate_tracking": candidate_tracking,
+                "shadow_evaluation_id": shadow_evaluation_id,
                 "shadow_option_chain_engine": shadow_option_chain_engine,
                 "shadow_context_classifier": shadow_context_classifier,
                 "shadow_market_structure_engine": shadow_market_structure_engine,

@@ -3,6 +3,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.engine.decision.decision_logger import update_decision_engine_outcome
+from app.engine.setup.setup_logger import update_setup_outcome
 from app.engine.specialist.models import LabelRecord, SpecialistEngineLog
 from app.engine.specialist.shadow_logger import update_market_result
 
@@ -114,16 +116,12 @@ def _process_rows(db: Session, rows: list) -> dict:
             eval_id = data.get("evaluation_id")
             market_result = _market_result(data)
             if eval_id and market_result:
-                existing = (
-                    db.query(SpecialistEngineLog)
-                    .filter(
-                        SpecialistEngineLog.evaluation_id == eval_id,
-                        SpecialistEngineLog.engine_name == "option_chain_engine",
-                    )
-                    .first()
+                matched_engines = _propagate_market_result(
+                    db=db,
+                    evaluation_id=eval_id,
+                    market_result=market_result,
                 )
-                if existing:
-                    update_market_result(db, eval_id, "option_chain_engine", market_result, "MANUAL")
+                if matched_engines > 0:
                     matched += 1
                 else:
                     standalone += 1
@@ -138,6 +136,24 @@ def _process_rows(db: Session, rows: list) -> dict:
         "stored_as_standalone": standalone,
         "errors": errors,
     }
+
+
+def _propagate_market_result(db: Session, evaluation_id: str, market_result: str) -> int:
+    engine_names = [
+        row[0]
+        for row in (
+            db.query(SpecialistEngineLog.engine_name)
+            .filter(SpecialistEngineLog.evaluation_id == evaluation_id)
+            .distinct()
+            .all()
+        )
+    ]
+    for engine_name in engine_names:
+        update_market_result(db, evaluation_id, engine_name, market_result, "MANUAL")
+    if engine_names:
+        update_setup_outcome(db, evaluation_id, market_result)
+        update_decision_engine_outcome(db, evaluation_id, market_result)
+    return len(engine_names)
 
 
 def import_jsonl_labels(db: Session, file_path: str) -> dict:
