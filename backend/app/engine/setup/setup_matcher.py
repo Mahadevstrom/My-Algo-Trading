@@ -19,6 +19,7 @@ class SetupMatcher:
         oc_evidence: EngineEvidence,
         ms_evidence: EngineEvidence,
         context_evidence: ContextEvidence,
+        momentum_evidence: EngineEvidence | None = None,
         signal_id: str = None,
         signal_v2_decision: str = None,
         evaluation_id: str = None,
@@ -100,7 +101,8 @@ class SetupMatcher:
             base_confidence += (supporting_pass_count / max(supporting_total, 1)) * 0.4
             context_modifiers = _loads(setup.context_modifiers_json, {})
             ctx_mod = float(context_modifiers.get(context_evidence.context_type, 0.0) or 0.0)
-            final_confidence = round(max(0.0, min(1.0, base_confidence + ctx_mod)), 3)
+            momentum_penalty, momentum_warning = _momentum_penalty(momentum_evidence)
+            final_confidence = round(max(0.0, min(1.0, base_confidence + ctx_mod + momentum_penalty)), 3)
             if final_confidence < (setup.min_confidence or 0.0):
                 continue
 
@@ -115,6 +117,8 @@ class SetupMatcher:
                 summary += f" Historical: {hist_win_rate}% win rate over {hist_count} trades."
             else:
                 summary += " Historical: insufficient data yet."
+            if momentum_warning:
+                summary += f" {momentum_warning}"
 
             return SetupMatchEvidence(
                 setup_name=setup.setup_name,
@@ -151,6 +155,7 @@ class SetupMatcher:
         oc_evidence: EngineEvidence,
         ms_evidence: EngineEvidence,
         context_evidence: ContextEvidence,
+        momentum_evidence: EngineEvidence | None = None,
         signal_id: str = None,
         signal_v2_decision: str = None,
         evaluation_id: str = None,
@@ -161,6 +166,7 @@ class SetupMatcher:
                 oc_evidence=oc_evidence,
                 ms_evidence=ms_evidence,
                 context_evidence=context_evidence,
+                momentum_evidence=momentum_evidence,
                 signal_id=signal_id,
                 signal_v2_decision=signal_v2_decision,
                 evaluation_id=evaluation_id,
@@ -249,3 +255,11 @@ def _historical_performance(db: Session, setup_name: str) -> tuple[int, float | 
         return count, None, None
     wins = sum(1 for item in trades if item.outcome_correct)
     return count, round(wins / count * 100, 1), None
+
+
+def _momentum_penalty(momentum_evidence: EngineEvidence | None) -> tuple[float, str | None]:
+    if not momentum_evidence:
+        return 0.0, None
+    if momentum_evidence.verdict in {"REVERSAL_RISK", "MOMENTUM_WEAKENING"}:
+        return -0.08, "Momentum validation warns of reversal risk - confidence reduced."
+    return 0.0, None

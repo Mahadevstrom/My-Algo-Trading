@@ -25,12 +25,13 @@ def run_setup_matcher_shadow(
         evidence = _latest_evidence(db)
         if evidence is None:
             return
-        oc_ev, ms_ev, ctx_ev = evidence
+        oc_ev, ms_ev, ctx_ev, momentum_ev = evidence
         match = SetupMatcher().safe_match(
             db=db,
             oc_evidence=oc_ev,
             ms_evidence=ms_ev,
             context_evidence=ctx_ev,
+            momentum_evidence=momentum_ev,
             signal_id=signal_id,
             signal_v2_decision=signal_v2_decision,
             evaluation_id=str(uuid.uuid4()),
@@ -54,6 +55,12 @@ def _latest_evidence(db: Session):
         .order_by(SpecialistEngineLog.created_at.desc())
         .first()
     )
+    momentum_log = (
+        db.query(SpecialistEngineLog)
+        .filter(SpecialistEngineLog.engine_name == "nifty_momentum_engine", SpecialistEngineLog.created_at >= cutoff)
+        .order_by(SpecialistEngineLog.created_at.desc())
+        .first()
+    )
     ctx_log = (
         db.query(ContextClassificationLog)
         .filter(ContextClassificationLog.created_at >= cutoff)
@@ -62,7 +69,8 @@ def _latest_evidence(db: Session):
     )
     if not (oc_log and ms_log and ctx_log):
         return None
-    return _engine_evidence(oc_log), _engine_evidence(ms_log), _context_evidence(ctx_log)
+    momentum_evidence = _engine_evidence(momentum_log) if momentum_log else None
+    return _engine_evidence(oc_log), _engine_evidence(ms_log), _context_evidence(ctx_log), momentum_evidence
 
 
 def _engine_evidence(row: SpecialistEngineLog) -> EngineEvidence:

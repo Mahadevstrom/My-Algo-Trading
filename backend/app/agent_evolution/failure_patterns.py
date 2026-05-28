@@ -1,4 +1,4 @@
-def detect_late_entry_pattern(trades: list) -> dict or None:
+def detect_late_entry_pattern(trades: list) -> dict | None:
     loss_trades = [t for t in trades if t.result == "LOSS"]
     total_losses = len(loss_trades)
     
@@ -22,7 +22,7 @@ def detect_late_entry_pattern(trades: list) -> dict or None:
         }
     return None
 
-def detect_chop_trap_pattern(trades: list) -> dict or None:
+def detect_chop_trap_pattern(trades: list) -> dict | None:
     sideways_trades = [t for t in trades if t.regime_at_entry == "SIDEWAYS"]
     count = len(sideways_trades)
     if count >= 5:
@@ -38,7 +38,7 @@ def detect_chop_trap_pattern(trades: list) -> dict or None:
             }
     return None
 
-def detect_midday_weakness_pattern(trades: list) -> dict or None:
+def detect_midday_weakness_pattern(trades: list) -> dict | None:
     midday = [t for t in trades if t.session_window_at_entry == "MIDDAY_CAUTION"]
     morning = [t for t in trades if t.session_window_at_entry == "ACTIVE_MORNING"]
     
@@ -64,7 +64,7 @@ def detect_midday_weakness_pattern(trades: list) -> dict or None:
             }
     return None
 
-def detect_high_confidence_failure_pattern(trades: list) -> dict or None:
+def detect_high_confidence_failure_pattern(trades: list) -> dict | None:
     high_conf = []
     for t in trades:
         val = t.confidence_score_at_entry
@@ -88,7 +88,7 @@ def detect_high_confidence_failure_pattern(trades: list) -> dict or None:
             }
     return None
 
-def detect_oi_contradiction_pattern(trades: list) -> dict or None:
+def detect_oi_contradiction_pattern(trades: list) -> dict | None:
     contradictions = []
     for t in trades:
         if t.option_type == "CE" and t.oi_direction_at_entry == "BEARISH":
@@ -110,7 +110,7 @@ def detect_oi_contradiction_pattern(trades: list) -> dict or None:
             }
     return None
 
-def detect_low_filter_count_pattern(trades: list) -> dict or None:
+def detect_low_filter_count_pattern(trades: list) -> dict | None:
     low_filter = [t for t in trades if t.filters_passed_count is not None and t.filters_passed_count <= 5]
     count = len(low_filter)
     if count >= 5:
@@ -127,7 +127,7 @@ def detect_low_filter_count_pattern(trades: list) -> dict or None:
             }
     return None
 
-def detect_premium_decay_risk(trades: list) -> dict or None:
+def detect_premium_decay_risk(trades: list) -> dict | None:
     losses = [t for t in trades if t.result == "LOSS" and t.pnl is not None]
     if losses:
         avg_loss = sum(t.pnl for t in losses) / len(losses)

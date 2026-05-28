@@ -471,14 +471,141 @@ class TestSetupMatcher(unittest.TestCase):
         self.assertGreater(match2.match_confidence, match1.match_confidence)
         self.assertEqual(match2.context_effect, "BOOST")
 
-    def test_8_safe_match_never_raises(self):
+    def test_8_momentum_reversal_risk_reduces_match_confidence(self):
+        oc = EngineEvidence(
+            engine="option_chain_engine",
+            score=74.0,
+            direction="BEARISH",
+            verdict="PE_STRONG",
+            confidence=0.8,
+            evidence={},
+            warnings=[],
+            blocking=False,
+            blocking_reason=None,
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+        ms = EngineEvidence(
+            engine="market_structure_engine",
+            score=68.0,
+            direction="BEARISH",
+            verdict="BEARISH_TREND",
+            confidence=0.8,
+            evidence={},
+            warnings=[],
+            blocking=False,
+            blocking_reason=None,
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+        ctx = ContextEvidence(
+            context_type="NORMAL_TRADING_DAY",
+            context_confidence=0.9,
+            secondary_context=None,
+            ist_time_str="10:30",
+            ist_date_str="2026-05-27",
+            day_of_week="WEDNESDAY",
+            is_expiry_day=False,
+            is_monthly_expiry=False,
+            days_to_expiry=1,
+            opening_gap_pct=0.0,
+            vix_value=15.0,
+            vix_vs_20day_avg_pct=0.0,
+            previous_day_range_pct=1.2,
+            is_known_event_day=False,
+            known_event_name=None,
+            data_quality_status="CLEAN",
+            confidence_modifier=0.0,
+            context_summary="",
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+        momentum = EngineEvidence(
+            engine="nifty_momentum_engine",
+            score=40.0,
+            direction="BULLISH",
+            verdict="REVERSAL_RISK",
+            confidence=0.7,
+            evidence={},
+            warnings=[],
+            blocking=False,
+            blocking_reason=None,
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+
+        normal_match = self.matcher.safe_match(self.db, oc, ms, ctx)
+        penalized_match = self.matcher.safe_match(self.db, oc, ms, ctx, momentum_evidence=momentum)
+
+        self.assertTrue(normal_match.matched)
+        self.assertTrue(penalized_match.matched)
+        self.assertAlmostEqual(penalized_match.match_confidence, normal_match.match_confidence - 0.08, places=3)
+        self.assertIn("Momentum validation warns of reversal risk", penalized_match.match_summary)
+
+    def test_9_missing_momentum_does_not_block_setup_matching(self):
+        oc = EngineEvidence(
+            engine="option_chain_engine",
+            score=74.0,
+            direction="BEARISH",
+            verdict="PE_STRONG",
+            confidence=0.8,
+            evidence={},
+            warnings=[],
+            blocking=False,
+            blocking_reason=None,
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+        ms = EngineEvidence(
+            engine="market_structure_engine",
+            score=68.0,
+            direction="BEARISH",
+            verdict="BEARISH_TREND",
+            confidence=0.8,
+            evidence={},
+            warnings=[],
+            blocking=False,
+            blocking_reason=None,
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+        ctx = ContextEvidence(
+            context_type="NORMAL_TRADING_DAY",
+            context_confidence=0.9,
+            secondary_context=None,
+            ist_time_str="10:30",
+            ist_date_str="2026-05-27",
+            day_of_week="WEDNESDAY",
+            is_expiry_day=False,
+            is_monthly_expiry=False,
+            days_to_expiry=1,
+            opening_gap_pct=0.0,
+            vix_value=15.0,
+            vix_vs_20day_avg_pct=0.0,
+            previous_day_range_pct=1.2,
+            is_known_event_day=False,
+            known_event_name=None,
+            data_quality_status="CLEAN",
+            confidence_modifier=0.0,
+            context_summary="",
+            evaluated_at=datetime.utcnow(),
+            evaluation_id=None,
+        )
+
+        match = self.matcher.safe_match(self.db, oc, ms, ctx, momentum_evidence=None)
+
+        self.assertTrue(match.matched)
+        self.assertEqual(match.setup_name, SetupName.PE_BREAKDOWN_CONTINUATION)
+        self.assertNotIn("Momentum validation warns", match.match_summary)
+
+    def test_10_safe_match_never_raises(self):
         # Pass None to force an error internally
         match = self.matcher.safe_match(self.db, None, None, None)
         self.assertFalse(match.matched)
         self.assertEqual(match.setup_name, SetupName.INSUFFICIENT_ENGINE_DATA)
         self.assertEqual(match.direction_implied, "WAIT")
 
-    def test_9_setup_performance_endpoint_returns_correct_shape(self):
+    def test_11_setup_performance_endpoint_returns_correct_shape(self):
         from app.engine.setup.routes import setup_performance
         res = setup_performance(self.db)
         self.assertTrue(res["ok"])
@@ -486,7 +613,7 @@ class TestSetupMatcher(unittest.TestCase):
         self.assertIn("total_evaluations", res)
         self.assertIn("insight", res)
 
-    def test_10_setup_match_log_is_saved_correctly(self):
+    def test_12_setup_match_log_is_saved_correctly(self):
         oc = EngineEvidence(
             engine="option_chain_engine",
             score=74.0,
@@ -545,7 +672,7 @@ class TestSetupMatcher(unittest.TestCase):
         self.assertEqual(log.signal_id, "test-sig-id")
         self.assertEqual(log.signal_v2_decision, "PE")
 
-    def test_11_no_setup_found_when_all_setups_blocked_by_context(self):
+    def test_13_no_setup_found_when_all_setups_blocked_by_context(self):
         oc = EngineEvidence(
             engine="option_chain_engine",
             score=74.0,
@@ -599,7 +726,7 @@ class TestSetupMatcher(unittest.TestCase):
         self.assertFalse(match.matched)
         self.assertEqual(match.setup_name, SetupName.NO_SETUP_FOUND)
 
-    def test_12_condition_evaluator_operators(self):
+    def test_14_condition_evaluator_operators(self):
         oc_dict = {"direction": "BEARISH", "verdict": "PE_STRONG", "score": 74.0}
         ms_dict = {"direction": "BEARISH", "verdict": "BEARISH_TREND", "score": 68.0}
         ctx_dict = {"context_type": "NORMAL_TRADING_DAY", "data_quality_status": "CLEAN"}

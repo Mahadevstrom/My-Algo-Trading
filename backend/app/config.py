@@ -185,7 +185,7 @@ class Settings(BaseModel):
     )
     enable_setup_matcher: bool = Field(default_factory=lambda: _env_bool("ENABLE_SETUP_MATCHER", True))
     setup_matcher_evidence_window_seconds: int = Field(
-        default_factory=lambda: _env_int("SETUP_MATCHER_EVIDENCE_WINDOW_SECONDS", 60)
+        default_factory=lambda: _env_int("SETUP_MATCHER_EVIDENCE_WINDOW_SECONDS", 90)
     )
     setup_matcher_min_historical_trades: int = Field(
         default_factory=lambda: _env_int("SETUP_MATCHER_MIN_HISTORICAL_TRADES", 5)
@@ -196,7 +196,7 @@ class Settings(BaseModel):
         default_factory=lambda: os.getenv("DECISION_ENGINE_V2_MODE", "SHADOW").strip().upper()
     )
     decision_engine_v2_evidence_window_seconds: int = Field(
-        default_factory=lambda: _env_int("DECISION_ENGINE_V2_EVIDENCE_WINDOW_SECONDS", 120)
+        default_factory=lambda: _env_int("DECISION_ENGINE_V2_EVIDENCE_WINDOW_SECONDS", 90)
     )
     decision_engine_v2_min_confidence: float = Field(
         default_factory=lambda: _env_float("DECISION_ENGINE_V2_MIN_CONFIDENCE", 0.62)
